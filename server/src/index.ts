@@ -28,7 +28,7 @@ import {
 } from './store.js';
 import { compileProject, checkLatexmk } from './compile.js';
 import { forwardSearch, inverseSearch, checkSynctex } from './synctex.js';
-import { ask as assistantAsk, status as assistantStatus, saveCredential as assistantSaveCredential } from './assistant.js';
+import { ask as assistantAsk, diagnose as assistantDiagnose, status as assistantStatus, saveCredential as assistantSaveCredential } from './assistant.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -98,6 +98,20 @@ app.post('/api/assistant/ask', wrap(async (req, res) => {
     return;
   }
   res.json({ options: await assistantAsk({ selection, prompt, fileName, language }) });
+}));
+
+app.post('/api/assistant/diagnose', wrap(async (req, res) => {
+  const { log, errors, mainFile } = req.body ?? {};
+  if (typeof log !== 'string' || !log.trim()) {
+    res.status(400).json({ error: 'Expected { log }.' });
+    return;
+  }
+  const answer = await assistantDiagnose({
+    log,
+    errors: Array.isArray(errors) ? errors.map(String) : undefined,
+    mainFile: typeof mainFile === 'string' ? mainFile : undefined,
+  });
+  res.json({ answer });
 }));
 
 // Logo served at runtime (replaceable without rebuilding — see resolveLogoPath).

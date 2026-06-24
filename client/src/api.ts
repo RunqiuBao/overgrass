@@ -158,6 +158,20 @@ export const api = {
     );
     return data.options;
   },
+  async assistantDiagnose(params: {
+    log: string;
+    errors?: string[];
+    mainFile?: string | null;
+  }): Promise<string> {
+    const data = await json<{ answer: string }>(
+      await fetch(`${BASE}/assistant/diagnose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      }),
+    );
+    return data.answer;
+  },
 
   // SyncTeX
   async synctexForward(id: string, file: string, line: number, column = 0): Promise<ForwardHit[]> {

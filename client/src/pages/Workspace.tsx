@@ -35,6 +35,8 @@ export default function Workspace() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosis, setDiagnosis] = useState<string | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
 
   // SyncTeX state
   const [pdfHighlight, setPdfHighlight] = useState<PdfHighlight | null>(null);
@@ -166,6 +168,7 @@ export default function Workspace() {
     if (openPath && dirty) await saveNow(openPath, content);
     setCompiling(true);
     setError(null);
+    setDiagnosis(null);
     try {
       const res = await api.compile(id);
       setResult(res);
@@ -312,6 +315,24 @@ export default function Workspace() {
 
   // --- Claude assistant -----------------------------------------------------
 
+  async function handleDiagnose() {
+    if (!result || diagnosing) return;
+    setDiagnosing(true);
+    setDiagnosis(null);
+    try {
+      const answer = await api.assistantDiagnose({
+        log: result.log,
+        errors: result.errors,
+        mainFile: result.mainFile,
+      });
+      setDiagnosis(answer);
+    } catch (e) {
+      setDiagnosis(`⚠ ${(e as Error).message}`);
+    } finally {
+      setDiagnosing(false);
+    }
+  }
+
   function handleAssistReplace(text: string) {
     if (!assist) return;
     setApplyEdit({ from: assist.from, to: assist.to, text });
@@ -440,9 +461,16 @@ export default function Workspace() {
                 </span>
               )}
             </span>
-            <button className="icon-btn" onClick={() => setShowLog(false)}>
-              ✕
-            </button>
+            <span className="log-header-actions">
+              {result && (!result.success || result.errors.length > 0) && (
+                <button className="btn btn-sm" onClick={handleDiagnose} disabled={diagnosing}>
+                  {diagnosing ? '⏳ Diagnosing…' : '✦ Diagnose with Claude'}
+                </button>
+              )}
+              <button className="icon-btn" onClick={() => setShowLog(false)}>
+                ✕
+              </button>
+            </span>
           </div>
           {result && result.errors.length > 0 && (
             <ul className="log-errors">
@@ -450,6 +478,17 @@ export default function Workspace() {
                 <li key={i}>{e}</li>
               ))}
             </ul>
+          )}
+          {diagnosis && (
+            <div className="log-diagnosis">
+              <div className="log-diagnosis-head">
+                <span>✦ Claude’s diagnosis</span>
+                <button className="icon-btn" onClick={() => setDiagnosis(null)}>
+                  ✕
+                </button>
+              </div>
+              <div className="log-diagnosis-body">{diagnosis}</div>
+            </div>
           )}
           <pre className="log-body">{result?.log ?? 'No log yet. Press Recompile.'}</pre>
         </div>

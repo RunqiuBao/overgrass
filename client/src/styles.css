@@ -559,6 +559,38 @@ body.resizing-col iframe { pointer-events: none; }
 .log-header .ok { color: #6ccb5f; }
 .log-header .warn { color: #e3b341; }
 .log-header .err { color: #f08a7a; }
+.log-header-actions { display: flex; align-items: center; gap: 8px; }
+.btn-sm { padding: 3px 9px; font-size: 12px; }
+
+/* Claude's compile-error diagnosis */
+.log-diagnosis {
+  flex-shrink: 0;
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  background: #16241a;
+  border-bottom: 1px solid var(--green);
+}
+.log-diagnosis-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6ccb5f;
+  flex-shrink: 0;
+}
+.log-diagnosis-head .icon-btn { color: #cfe8d4; }
+.log-diagnosis-body {
+  overflow: auto;
+  padding: 0 12px 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d7e7da;
+}
 .log-errors {
   margin: 0;
   padding: 8px 12px;

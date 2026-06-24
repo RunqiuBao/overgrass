@@ -116,6 +116,32 @@ function buildUserText({ selection, prompt, fileName, language }: AskParams): st
   );
 }
 
+const DIAGNOSE_SYSTEM = [
+  'You are an expert in LaTeX and the latexmk / pdflatex toolchain.',
+  "The user's document failed to compile or compiled with errors.",
+  'Given the compiler log and extracted error lines, explain in plain language what is wrong',
+  'and give concrete, minimal fixes. Focus on the real errors; ignore Overfull/Underfull hbox',
+  'and font-substitution warnings unless they are the cause. If a package or command is missing,',
+  'name it and the exact fix (e.g. the \\usepackage line or the macro definition).',
+  'Be concise: a one-line summary, then short bullet points. Reference file:line when the log gives it.',
+].join(' ');
+
+export interface DiagnoseParams {
+  log: string;
+  errors?: string[];
+  mainFile?: string;
+}
+
+function buildDiagnoseText({ log, errors, mainFile }: DiagnoseParams): string {
+  // The fatal error is at the end of the log; keep the tail to stay within budget.
+  const tail = log.length > 12000 ? log.slice(-12000) : log;
+  return (
+    (mainFile ? `Main file: ${mainFile}\n\n` : '') +
+    (errors && errors.length ? `Extracted error lines:\n${errors.join('\n')}\n\n` : '') +
+    `Compiler log (tail):\n${tail}`
+  );
+}
+
 /** Drop a leading/trailing ```fence``` if the model wrapped the whole reply. */
 function stripFences(s: string): string {
   const t = s.trim();
@@ -154,16 +180,27 @@ function extractOptions(raw: string): string[] {
   return [stripFences(trimmed)];
 }
 
+/** Transform a selection — returns one or more replacement options. */
 export async function ask(params: AskParams): Promise<string[]> {
+  return extractOptions(await run(SYSTEM_PROMPT, buildUserText(params)));
+}
+
+/** Diagnose a compile failure — returns a free-form explanation + fixes. */
+export async function diagnose(params: DiagnoseParams): Promise<string> {
+  return stripFences(await run(DIAGNOSE_SYSTEM, buildDiagnoseText(params)));
+}
+
+/** Route a (system, user) prompt through whichever backend is configured. */
+async function run(system: string, userText: string): Promise<string> {
   const mode = activeMode();
-  if (mode === 'subscription') return extractOptions(await askViaCli(params));
-  if (mode === 'api') return extractOptions(await askViaApi(params));
+  if (mode === 'subscription') return askViaCli(system, userText);
+  if (mode === 'api') return askViaApi(system, userText);
   throw new Error('Claude is not configured. Add an API key or subscription token to start.');
 }
 
 // --- API key path (Messages API) -------------------------------------------
 
-async function askViaApi(params: AskParams): Promise<string> {
+async function askViaApi(system: string, userText: string): Promise<string> {
   const apiKey = getApiKey()!;
   const client = new Anthropic({ apiKey });
   let resp;
@@ -171,8 +208,8 @@ async function askViaApi(params: AskParams): Promise<string> {
     resp = await client.messages.create({
       model: API_MODEL,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserText(params) }],
+      system,
+      messages: [{ role: 'user', content: userText }],
     });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
@@ -232,7 +269,7 @@ function runClaude(args: string[], input: string, env: NodeJS.ProcessEnv, cwd: s
   });
 }
 
-async function askViaCli(params: AskParams): Promise<string> {
+async function askViaCli(system: string, userText: string): Promise<string> {
   const token = getOAuthToken()!;
 
   // CLAUDE_CODE_OAUTH_TOKEN is low in the CLI's auth precedence — a stray
@@ -242,14 +279,14 @@ async function askViaCli(params: AskParams): Promise<string> {
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
 
-  const args = ['-p', '--output-format', 'json', '--system-prompt', SYSTEM_PROMPT];
+  const args = ['-p', '--output-format', 'json', '--system-prompt', system];
   if (MODEL) args.push('--model', MODEL);
 
   // Run in a throwaway empty dir so the agent has nothing to read/modify.
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'overgrass-claude-'));
   let result: CliResult;
   try {
-    result = await runClaude(args, buildUserText(params), env, tmp);
+    result = await runClaude(args, userText, env, tmp);
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
     if (err.code === 'ENOENT') {
