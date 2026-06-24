@@ -205,3 +205,15 @@ overgrass/
 - No multi-user / real-time collaboration — this is a single-user local tool.
 - SyncTeX needs the `synctex` binary (bundled with TeX Live) and a successful
   compile first; precision depends on your TeX version's SyncTeX data.
+
+## License
+
+Copyright (C) 2026 Runqiu Bao
+
+Overgrass is free software: you can redistribute it and/or modify it under the
+terms of the **GNU General Public License v3.0 or later** as published by the
+Free Software Foundation. See [LICENSE](LICENSE) for the full text.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.

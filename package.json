@@ -2,6 +2,7 @@
   "name": "overgrass",
   "version": "1.0.0",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "description": "A local, self-hosted Overleaf clone. Edit your downloaded Overleaf projects locally with a LaTeX editor and live PDF preview.",
   "workspaces": [
     "server",
