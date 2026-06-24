@@ -42,9 +42,9 @@ container.
 
 ```bash
 # build the image and start the container
-npm run docker:up
+DATA_DIR=~/overgrass-projects npm run docker:up
 #   or directly:
-scripts/docker.sh up
+DATA_DIR=~/overgrass-projects scripts/docker.sh up
 ```
 
 On its first run, the script installs an `overgrass` shell function into
