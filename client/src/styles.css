@@ -478,6 +478,27 @@ a { color: var(--green); }
   border-radius: 4px;
   font-size: 12px;
 }
+.assistant-options { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow: auto; }
+.assistant-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  transition: border-color 0.12s;
+}
+.assistant-option:hover { border-color: var(--green); }
+.assistant-option-text {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+.assistant-option-use { align-self: flex-end; }
 .assistant-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* ---- log panel ---- */

@@ -97,7 +97,7 @@ app.post('/api/assistant/ask', wrap(async (req, res) => {
     res.status(400).json({ error: 'Expected { selection, prompt }.' });
     return;
   }
-  res.json({ suggestion: await assistantAsk({ selection, prompt, fileName, language }) });
+  res.json({ options: await assistantAsk({ selection, prompt, fileName, language }) });
 }));
 
 // Logo served at runtime (replaceable without rebuilding — see resolveLogoPath).

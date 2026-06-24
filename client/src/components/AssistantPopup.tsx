@@ -20,7 +20,7 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
   const [keyInput, setKeyInput] = useState('');
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
-  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [options, setOptions] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const keyRef = useRef<HTMLInputElement>(null);
@@ -63,10 +63,10 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
     if (!prompt.trim() || loading) return;
     setLoading(true);
     setError(null);
-    setSuggestion(null);
+    setOptions(null);
     try {
       const result = await api.assistantAsk({ selection, prompt, fileName, language });
-      setSuggestion(result);
+      setOptions(result);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -137,7 +137,7 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
             <textarea
               ref={promptRef}
               className="assistant-prompt"
-              placeholder="Ask Claude to rewrite, fix, translate, explain… (Enter to send, Shift+Enter for newline)"
+              placeholder="Ask Claude to rewrite, fix, translate… or 'give me 3 options'. (Enter to send, Shift+Enter for newline)"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
@@ -149,15 +149,33 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
             />
             {error && <div className="assistant-error">{error}</div>}
 
-            {suggestion !== null && (
+            {/* Single answer → one suggestion box. Multiple → pick-one cards. */}
+            {options && options.length === 1 && (
               <>
                 <div className="assistant-suggestion-label small muted">Suggestion</div>
-                <div className="assistant-suggestion">{suggestion}</div>
+                <div className="assistant-suggestion">{options[0]}</div>
+              </>
+            )}
+            {options && options.length > 1 && (
+              <>
+                <div className="assistant-suggestion-label small muted">
+                  {options.length} options — pick your favorite
+                </div>
+                <div className="assistant-options">
+                  {options.map((opt, i) => (
+                    <div key={i} className="assistant-option">
+                      <div className="assistant-option-text">{opt}</div>
+                      <button className="btn btn-primary assistant-option-use" onClick={() => onReplace(opt)}>
+                        ✓ Use this
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
 
             <div className="assistant-actions">
-              {suggestion === null ? (
+              {options === null ? (
                 <button className="btn btn-primary" onClick={ask} disabled={loading || !prompt.trim()}>
                   {loading ? '⏳ Asking…' : '✦ Ask Claude'}
                 </button>
@@ -169,12 +187,11 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
                   <button className="btn" onClick={onClose}>
                     Keep original
                   </button>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => onReplace(suggestion)}
-                  >
-                    ✓ Replace selection
-                  </button>
+                  {options.length === 1 && (
+                    <button className="btn btn-primary" onClick={() => onReplace(options[0])}>
+                      ✓ Replace selection
+                    </button>
+                  )}
                 </>
               )}
             </div>

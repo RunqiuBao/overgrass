@@ -148,15 +148,15 @@ export const api = {
     prompt: string;
     fileName?: string;
     language?: string;
-  }): Promise<string> {
-    const data = await json<{ suggestion: string }>(
+  }): Promise<string[]> {
+    const data = await json<{ options: string[] }>(
       await fetch(`${BASE}/assistant/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
       }),
     );
-    return data.suggestion;
+    return data.options;
   },
 
   // SyncTeX

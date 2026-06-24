@@ -95,11 +95,13 @@ export interface AskParams {
 const SYSTEM_PROMPT = [
   'You are an AI writing assistant embedded in a LaTeX editor (an Overleaf-like app).',
   'The user has selected a snippet of their document and given an instruction.',
-  'Rewrite or transform the selected snippet according to the instruction.',
-  'Return ONLY the replacement text that should take the place of the selection —',
-  'no Markdown code fences, no preamble, no explanation, no commentary.',
-  'Preserve LaTeX syntax and the surrounding style.',
-  'If the instruction is a question rather than an edit, answer it concisely and directly.',
+  'Respond with ONLY a JSON object of the form {"options": ["<replacement>", ...]}.',
+  'Each array element is a COMPLETE replacement for the selected snippet —',
+  'preserve LaTeX syntax and surrounding style, no Markdown code fences, no commentary.',
+  'Provide exactly ONE option, UNLESS the user explicitly asks for multiple / alternatives /',
+  'variations / choices — in that case provide 2 to 4 genuinely distinct options.',
+  'If the instruction is a question rather than an edit, answer it as a single option.',
+  'Output the raw JSON object only — no preamble, no code fences.',
 ].join(' ');
 
 function buildUserText({ selection, prompt, fileName, language }: AskParams): string {
@@ -118,10 +120,41 @@ function stripFences(s: string): string {
   return (m ? m[1] : t).trim();
 }
 
-export async function ask(params: AskParams): Promise<string> {
+/** Narrow a string to the outermost JSON object/array it contains. */
+function sliceJson(s: string): string | null {
+  const start = s.search(/[{[]/);
+  const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
+  return start >= 0 && end > start ? s.slice(start, end + 1) : null;
+}
+
+/** Parse the model's reply into one or more replacement options. */
+function extractOptions(raw: string): string[] {
+  const trimmed = raw.trim();
+  for (const candidate of [trimmed, sliceJson(trimmed)]) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as { options?: unknown }).options)
+          ? (parsed as { options: unknown[] }).options
+          : null;
+      if (arr) {
+        const opts = arr.filter((o): o is string => typeof o === 'string' && o.trim() !== '');
+        if (opts.length) return opts.map((o) => o.trim());
+      }
+    } catch {
+      /* not JSON — try the next candidate */
+    }
+  }
+  // Reply wasn't JSON (or had no options): treat the whole thing as one option.
+  return [stripFences(trimmed)];
+}
+
+export async function ask(params: AskParams): Promise<string[]> {
   const mode = activeMode();
-  if (mode === 'subscription') return stripFences(await askViaCli(params));
-  if (mode === 'api') return stripFences(await askViaApi(params));
+  if (mode === 'subscription') return extractOptions(await askViaCli(params));
+  if (mode === 'api') return extractOptions(await askViaApi(params));
   throw new Error('Claude is not configured. Add an API key or subscription token to start.');
 }
 
@@ -224,20 +257,24 @@ async function askViaCli(params: AskParams): Promise<string> {
     await fsp.rm(tmp, { recursive: true, force: true });
   }
 
-  if (result.code !== 0) {
-    const detail = (result.err || result.out || '').trim().slice(0, 500);
-    throw new Error(`Claude Code CLI error: ${detail || `exit ${result.code}`}`);
+  // --output-format json yields a single result object — parse it regardless of
+  // exit code (the CLI prints errors there too), and surface a clean message.
+  let parsed: { result?: string; is_error?: boolean; api_error_status?: number } | null = null;
+  try {
+    parsed = JSON.parse(result.out);
+  } catch {
+    /* not JSON */
   }
 
-  // --output-format json yields a single result object: { result, is_error, ... }
-  try {
-    const parsed = JSON.parse(result.out) as { result?: string; is_error?: boolean };
-    if (parsed.is_error) {
-      throw new Error(`Claude Code returned an error: ${parsed.result ?? 'unknown'}`);
+  if (parsed?.is_error || result.code !== 0) {
+    if (parsed?.api_error_status === 401) {
+      throw new Error(
+        'Subscription token rejected (401 invalid bearer token). Regenerate it with `claude setup-token` and replace it (edit <data>/claude-config.json, or set CLAUDE_CODE_OAUTH_TOKEN and restart).',
+      );
     }
-    return parsed.result ?? '';
-  } catch {
-    // Fall back to raw stdout if it wasn't JSON for some reason.
-    return result.out.trim();
+    const detail = (parsed?.result || result.err || result.out || '').trim().slice(0, 500);
+    throw new Error(`Claude Code error: ${detail || `exit ${result.code}`}`);
   }
+
+  return parsed?.result ?? result.out.trim();
 }
