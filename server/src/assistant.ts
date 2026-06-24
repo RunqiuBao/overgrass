@@ -76,6 +76,9 @@ export function status(): { configured: boolean; mode: Mode | null; source: 'env
 /** Save a credential, routed by prefix: `sk-ant-oat…` → subscription, else API key. */
 export async function saveCredential(value: string): Promise<Mode> {
   const v = value.trim();
+  if (!v.startsWith('sk-ant-')) {
+    throw new Error('That does not look like an Anthropic credential (expected an sk-ant-… value).');
+  }
   const cfg = readConfig();
   const mode: Mode = v.startsWith('sk-ant-oat') ? 'subscription' : 'api';
   if (mode === 'subscription') cfg.oauthToken = v;
@@ -173,7 +176,9 @@ async function askViaApi(params: AskParams): Promise<string> {
     });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
-      throw new Error('Claude API key was rejected (401). Set a valid key and try again.');
+      throw new Error(
+        'API key rejected (401). This credential is being used as an API key. To use your Pro/Max subscription instead, paste the token from `claude setup-token` — it must start with sk-ant-oat01-.',
+      );
     }
     if (err instanceof Anthropic.RateLimitError) {
       throw new Error('Claude rate limit hit (429). Wait a moment and try again.');
