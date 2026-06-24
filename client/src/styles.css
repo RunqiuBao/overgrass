@@ -398,6 +398,14 @@ a { color: var(--green); }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Draggable (header) + resizable (corner grip). */
+  width: 380px;
+  height: auto;
+  min-width: 300px;
+  min-height: 200px;
+  max-width: 92vw;
+  max-height: 88vh;
+  resize: both;
 }
 .assistant-header {
   display: flex;
@@ -408,8 +416,10 @@ a { color: var(--green); }
   font-weight: 600;
   color: var(--green);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.assistant-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.assistant-drag { cursor: move; user-select: none; }
+.assistant-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; overflow: auto; }
 .assistant-mode { font-weight: 400; }
 .assistant-help { margin: 0; padding-left: 16px; line-height: 1.5; }
 .assistant-help code {

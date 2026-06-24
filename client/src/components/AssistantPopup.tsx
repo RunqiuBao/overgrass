@@ -41,9 +41,33 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
     else if (configured === false) keyRef.current?.focus();
   }, [configured]);
 
-  // Keep the popup on-screen.
-  const left = Math.min(x, window.innerWidth - WIDTH - 16);
-  const top = Math.min(y, window.innerHeight - 320);
+  // Position is stateful so the window can be dragged. Start on-screen.
+  const [pos, setPos] = useState(() => ({
+    left: Math.max(8, Math.min(x, window.innerWidth - WIDTH - 16)),
+    top: Math.max(8, Math.min(y, window.innerHeight - 320)),
+  }));
+  const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
+
+  // Drag the window by its header.
+  function startDrag(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest('button')) return; // let header buttons work
+    e.preventDefault();
+    dragOffset.current = { dx: e.clientX - pos.left, dy: e.clientY - pos.top };
+    const move = (ev: MouseEvent) => {
+      if (!dragOffset.current) return;
+      setPos({
+        left: Math.max(0, Math.min(ev.clientX - dragOffset.current.dx, window.innerWidth - 60)),
+        top: Math.max(0, Math.min(ev.clientY - dragOffset.current.dy, window.innerHeight - 40)),
+      });
+    };
+    const up = () => {
+      dragOffset.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
 
   async function saveKey() {
     if (!keyInput.trim()) return;
@@ -79,10 +103,11 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
     <div className="assistant-overlay" onMouseDown={onClose}>
       <div
         className="assistant-popup"
-        style={{ left, top, width: WIDTH }}
+        style={{ left: pos.left, top: pos.top }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="assistant-header">
+        <div className="assistant-header assistant-drag" onMouseDown={startDrag} title="Drag to move">
+
           <span>
             ✦ Claude assistant
             {mode && (
