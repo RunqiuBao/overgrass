@@ -51,6 +51,54 @@ export default function Workspace() {
   const uploadInput = useRef<HTMLInputElement>(null);
   const uploadDir = useRef<string>(''); // target folder for the next upload
 
+  // Resizable panes. Widths (px) for the file-tree and PDF panes; the editor
+  // pane flexes to fill whatever is left. Persisted across sessions.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [filesWidth, setFilesWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem('ws.filesWidth'));
+    return Number.isFinite(v) && v > 0 ? v : 240;
+  });
+  const [pdfWidth, setPdfWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem('ws.pdfWidth'));
+    return Number.isFinite(v) && v > 0 ? v : 560;
+  });
+  useEffect(() => { localStorage.setItem('ws.filesWidth', String(filesWidth)); }, [filesWidth]);
+  useEffect(() => { localStorage.setItem('ws.pdfWidth', String(pdfWidth)); }, [pdfWidth]);
+
+  // Refs mirror the latest widths so the move handler reads current values
+  // without re-binding listeners on every drag tick.
+  const filesWidthRef = useRef(filesWidth);
+  const pdfWidthRef = useRef(pdfWidth);
+  filesWidthRef.current = filesWidth;
+  pdfWidthRef.current = pdfWidth;
+
+  // Start dragging a gutter. `which` selects which pane the gutter resizes.
+  const startResize = useCallback((which: 'files' | 'pdf') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const body = bodyRef.current;
+      if (!body) return;
+      const rect = body.getBoundingClientRect();
+      // Keep at least 200px for the editor pane between the two gutters.
+      const minEditor = 200;
+      if (which === 'files') {
+        const max = rect.width - pdfWidthRef.current - minEditor;
+        setFilesWidth(Math.max(120, Math.min(ev.clientX - rect.left, max)));
+      } else {
+        const max = rect.width - filesWidthRef.current - minEditor;
+        setPdfWidth(Math.max(240, Math.min(rect.right - ev.clientX, max)));
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('resizing-col');
+    };
+    document.body.classList.add('resizing-col');
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
   const refreshTree = useCallback(async () => {
     setTree(await api.getFileTree(id));
   }, [id]);
@@ -312,8 +360,8 @@ export default function Workspace() {
 
       {error && <div className="banner banner-error">{error}</div>}
 
-      <div className="ws-body">
-        <aside className="pane pane-files">
+      <div className="ws-body" ref={bodyRef}>
+        <aside className="pane pane-files" style={{ width: filesWidth }}>
           <FileTree
             nodes={tree}
             selected={openPath}
@@ -326,6 +374,14 @@ export default function Workspace() {
             onUpload={triggerUpload}
           />
         </aside>
+
+        <div
+          className="col-gutter"
+          onMouseDown={startResize('files')}
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize"
+        />
 
         <section className="pane pane-editor">
           {openPath ? (
@@ -356,7 +412,15 @@ export default function Workspace() {
           )}
         </section>
 
-        <section className="pane pane-pdf">
+        <div
+          className="col-gutter"
+          onMouseDown={startResize('pdf')}
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize"
+        />
+
+        <section className="pane pane-pdf" style={{ width: pdfWidth }}>
           <PdfViewer url={pdfUrl} highlight={pdfHighlight} onReverse={handleInverseSync} />
         </section>
       </div>

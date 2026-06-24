@@ -254,13 +254,33 @@ a { color: var(--green); }
 .ws-body { flex: 1; display: flex; min-height: 0; }
 .pane { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
 .pane-files {
-  width: 240px;
   flex-shrink: 0;
   background: var(--panel);
-  border-right: 1px solid var(--border);
 }
-.pane-editor { flex: 1; min-width: 0; border-right: 1px solid var(--border); }
-.pane-pdf { width: 46%; min-width: 320px; background: #202224; }
+.pane-editor { flex: 1; min-width: 0; }
+.pane-pdf { flex-shrink: 0; background: #202224; }
+
+/* Draggable divider between panes. */
+.col-gutter {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--border);
+  position: relative;
+}
+.col-gutter:hover,
+body.resizing-col .col-gutter { background: var(--green); }
+/* Widen the hit area without changing the visual width. */
+.col-gutter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+/* Keep a smooth drag: don't let panes swallow the cursor / select text. */
+body.resizing-col { cursor: col-resize; user-select: none; }
+body.resizing-col iframe { pointer-events: none; }
 
 /* ---- file tree ---- */
 .file-tree { display: flex; flex-direction: column; height: 100%; }
