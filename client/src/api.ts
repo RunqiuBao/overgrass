@@ -1,4 +1,4 @@
-import type { CompileResult, FileNode, ForwardHit, InverseHit, ProjectMeta } from './types';
+import type { CompileResult, FileNode, ForwardHit, InverseHit, ProjectMeta, Version } from './types';
 
 const BASE = '/api';
 
@@ -171,6 +171,30 @@ export const api = {
       }),
     );
     return data.answer;
+  },
+
+  // History
+  async listHistory(id: string): Promise<Version[]> {
+    return json(await fetch(`${BASE}/projects/${id}/history`));
+  },
+  async snapshotVersion(id: string, message: string): Promise<Version | null> {
+    const data = await json<{ version: Version | null }>(
+      await fetch(`${BASE}/projects/${id}/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      }),
+    );
+    return data.version;
+  },
+  async restoreVersion(id: string, hash: string): Promise<void> {
+    await json(
+      await fetch(`${BASE}/projects/${id}/history/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hash }),
+      }),
+    );
   },
 
   // SyncTeX

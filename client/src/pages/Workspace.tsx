@@ -6,6 +6,7 @@ import FileTree from '../components/FileTree';
 import CodeEditor from '../components/CodeEditor';
 import PdfViewer, { type PdfHighlight } from '../components/PdfViewer';
 import AssistantPopup from '../components/AssistantPopup';
+import HistoryPanel from '../components/HistoryPanel';
 
 const TEXT_EXTS = ['.tex', '.txt', '.bib', '.cls', '.sty', '.md', '.markdown', '.json', '.yml', '.yaml', '.bst', '.csv', '.cfg', '.toml'];
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'];
@@ -37,6 +38,7 @@ export default function Workspace() {
   const [error, setError] = useState<string | null>(null);
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // SyncTeX state
   const [pdfHighlight, setPdfHighlight] = useState<PdfHighlight | null>(null);
@@ -333,6 +335,23 @@ export default function Workspace() {
     }
   }
 
+  // Reload the file tree and the open file from disk (after a history restore),
+  // without saving the stale editor buffer back over the restored content.
+  async function reloadFromDisk() {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setTree(await api.getFileTree(id));
+    if (openPath) {
+      try {
+        setContent(await api.readFile(id, openPath));
+        setDirty(false);
+      } catch {
+        setOpenPath(null);
+        setContent('');
+        setDirty(false);
+      }
+    }
+  }
+
   function handleAssistReplace(text: string) {
     if (!assist) return;
     setApplyEdit({ from: assist.from, to: assist.to, text });
@@ -365,6 +384,9 @@ export default function Workspace() {
           <a className="btn" href={api.exportUrl(id)}>
             ⬇ Download .zip
           </a>
+          <button className="btn" onClick={() => setShowHistory(true)} title="Version history">
+            🕘 History
+          </button>
           <button className="btn" onClick={() => setShowLog((s) => !s)}>
             {result && (!result.success || result.errors.length > 0) ? '⚠ Logs' : 'Logs'}
           </button>
@@ -492,6 +514,14 @@ export default function Workspace() {
           )}
           <pre className="log-body">{result?.log ?? 'No log yet. Press Recompile.'}</pre>
         </div>
+      )}
+
+      {showHistory && (
+        <HistoryPanel
+          projectId={id}
+          onRestored={reloadFromDisk}
+          onClose={() => setShowHistory(false)}
+        />
       )}
 
       {assist && (

@@ -29,6 +29,7 @@ import {
 import { compileProject, checkLatexmk } from './compile.js';
 import { forwardSearch, inverseSearch, checkSynctex } from './synctex.js';
 import { ask as assistantAsk, diagnose as assistantDiagnose, status as assistantStatus, saveCredential as assistantSaveCredential } from './assistant.js';
+import { listHistory, snapshot as historySnapshot, snapshotQuiet, restore as historyRestore } from './history.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -134,7 +135,9 @@ app.get('/api/projects', wrap(async (_req, res) => {
 
 app.post('/api/projects', wrap(async (req, res) => {
   const { name } = req.body ?? {};
-  res.status(201).json(await createProject(typeof name === 'string' ? name : 'Untitled Project'));
+  const meta = await createProject(typeof name === 'string' ? name : 'Untitled Project');
+  await snapshotQuiet(meta.id, 'Project created');
+  res.status(201).json(meta);
 }));
 
 app.get('/api/projects/:id', wrap(async (req, res) => {
@@ -151,7 +154,9 @@ app.patch('/api/projects/:id', wrap(async (req, res) => {
 }));
 
 app.post('/api/projects/:id/copy', wrap(async (req, res) => {
-  res.status(201).json(await copyProject(req.params.id));
+  const meta = await copyProject(req.params.id);
+  await snapshotQuiet(meta.id, 'Project created (copy)');
+  res.status(201).json(meta);
 }));
 
 app.delete('/api/projects/:id', wrap(async (req, res) => {
@@ -168,7 +173,9 @@ app.post('/api/projects/import', upload.single('file'), wrap(async (req, res) =>
   }
   const fallback = req.file.originalname.replace(/\.zip$/i, '') || 'Imported Project';
   const name = typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name : fallback;
-  res.status(201).json(await importZip(req.file.buffer, name));
+  const meta = await importZip(req.file.buffer, name);
+  await snapshotQuiet(meta.id, 'Imported project');
+  res.status(201).json(meta);
 }));
 
 app.get('/api/projects/:id/export', wrap(async (req, res) => {
@@ -268,7 +275,30 @@ app.post('/api/projects/:id/upload', upload.array('files'), wrap(async (req, res
 // --- Compilation ------------------------------------------------------------
 
 app.post('/api/projects/:id/compile', wrap(async (req, res) => {
+  // Checkpoint the source on each compile (only commits if it changed).
+  await snapshotQuiet(req.params.id, 'Auto-saved on compile');
   res.json(await compileProject(req.params.id));
+}));
+
+// --- History ----------------------------------------------------------------
+
+app.get('/api/projects/:id/history', wrap(async (req, res) => {
+  res.json(await listHistory(req.params.id));
+}));
+
+app.post('/api/projects/:id/history', wrap(async (req, res) => {
+  const message = typeof req.body?.message === 'string' ? req.body.message : 'Manual snapshot';
+  res.status(201).json({ version: await historySnapshot(req.params.id, message) });
+}));
+
+app.post('/api/projects/:id/history/restore', wrap(async (req, res) => {
+  const { hash } = req.body ?? {};
+  if (typeof hash !== 'string') {
+    res.status(400).json({ error: 'Expected { hash }.' });
+    return;
+  }
+  await historyRestore(req.params.id, hash);
+  res.json({ ok: true });
 }));
 
 // --- SyncTeX (source <-> PDF) ----------------------------------------------

@@ -29,7 +29,7 @@ ARG TEX_PACKAGES="texlive-full latexmk"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ${TEX_PACKAGES} curl ca-certificates \
+ && apt-get install -y --no-install-recommends ${TEX_PACKAGES} curl ca-certificates git \
  && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI — enables the optional Claude Pro/Max subscription path for the

@@ -192,8 +192,9 @@ export async function copyProject(id: string): Promise<ProjectMeta> {
   const newIdStr = newId();
   const dest = projectDir(newIdStr);
   await fsp.cp(src, dest, { recursive: true });
-  // Drop the copied build artifacts so the duplicate compiles fresh.
+  // Drop copied build artifacts and git history so the duplicate is fresh.
   await fsp.rm(path.join(dest, BUILD_DIRNAME), { recursive: true, force: true });
+  await fsp.rm(path.join(dest, '.git'), { recursive: true, force: true });
   const now = new Date().toISOString();
   const newMeta: ProjectMeta = {
     id: newIdStr,

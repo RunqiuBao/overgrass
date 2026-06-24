@@ -38,3 +38,9 @@ export interface InverseHit {
   line: number;
   column: number;
 }
+
+export interface Version {
+  hash: string;
+  date: string;
+  message: string;
+}

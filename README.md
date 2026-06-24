@@ -35,6 +35,10 @@ distribution via `latexmk`.
   to open a floating assistant: your selection is pre-loaded, you add an
   instruction (rewrite, fix, translate, explain…), and you choose whether to
   **replace the selection** with Claude's suggestion. Click outside to dismiss.
+- **Version history & rollback** — every compile checkpoints your source (and you
+  can **Save version** with a label anytime). Open **🕘 History** to browse versions
+  and **Restore** any of them. Rollback is non-destructive (your current state is
+  snapshotted first), backed by a hidden per-project Git repo.
 - **Compilation log panel** that pops open on errors.
 - **Export** the project back to a `.zip` at any time.
 

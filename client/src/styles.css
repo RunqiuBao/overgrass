@@ -401,6 +401,54 @@ body.resizing-col iframe { pointer-events: none; }
   padding: 24px;
 }
 
+/* ---- version history modal ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.history-modal {
+  width: 560px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--green);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.history-header-actions { display: flex; align-items: center; gap: 8px; }
+.history-body { overflow: auto; }
+.history-list { list-style: none; margin: 0; padding: 0; }
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.history-row:hover { background: var(--panel-2); }
+.history-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history-msg { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-current { color: var(--green); font-weight: 600; }
+
 /* ---- Claude assistant popup ---- */
 .assistant-overlay {
   position: fixed;
