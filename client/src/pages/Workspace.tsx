@@ -263,7 +263,7 @@ export default function Workspace() {
           <Link to="/" className="back-link" title="All projects">
             ←
           </Link>
-          <span className="logo">🌿</span>
+          <img className="logo-img-sm" src="/api/branding/logo" alt="Overgrass" />
           <strong>{project?.name ?? '…'}</strong>
           <span className="save-status small muted">
             {saving ? 'saving…' : dirty ? 'unsaved' : 'saved'}

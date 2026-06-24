@@ -1,4 +1,8 @@
-# 🌿 Overgrass — your local Overleaf
+<p align="center">
+  <img src="resources/overgrass-logo.png" alt="Overgrass logo" width="160" height="160" />
+</p>
+
+<h1 align="center">Overgrass — your local Overleaf</h1>
 
 A self-hosted, local clone of [Overleaf](https://www.overleaf.com): import the
 projects you download from Overleaf and edit them on your own machine, with a

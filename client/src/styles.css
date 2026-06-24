@@ -114,7 +114,13 @@ a { color: var(--green); }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-text { display: flex; flex-direction: column; }
 .brand h1 { font-size: 24px; margin: 0; color: var(--green); line-height: 1.15; }
-.brand .logo-img { height: 64px; width: auto; display: block; border-radius: 8px; }
+.brand .logo-img {
+  height: 128px;
+  width: 128px;
+  object-fit: cover;
+  display: block;
+  border-radius: 50%; /* logo art is circular — clip away the transparent corners */
+}
 .brand .tagline { color: var(--muted); font-size: 13px; }
 .dash-actions { display: flex; gap: 8px; }
 
@@ -227,6 +233,13 @@ a { color: var(--green); }
 }
 .ws-left { display: flex; align-items: center; gap: 10px; }
 .ws-left .logo { font-size: 18px; }
+.ws-left .logo-img-sm {
+  height: 30px;
+  width: 30px;
+  object-fit: cover;
+  display: block;
+  border-radius: 50%; /* match the circular logo art */
+}
 .back-link {
   text-decoration: none;
   font-size: 18px;
