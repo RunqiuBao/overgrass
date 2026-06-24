@@ -181,8 +181,12 @@ export const api = {
   },
 
   // History
-  async listHistory(id: string): Promise<Version[]> {
-    return json(await fetch(`${BASE}/projects/${id}/history`));
+  async listHistory(id: string, branch?: 'autosave'): Promise<Version[]> {
+    const q = branch ? `?branch=${branch}` : '';
+    return json(await fetch(`${BASE}/projects/${id}/history${q}`));
+  },
+  async autosave(id: string): Promise<{ saved: boolean; version: Version | null }> {
+    return json(await fetch(`${BASE}/projects/${id}/autosave`, { method: 'POST' }));
   },
   async snapshotVersion(id: string, message: string): Promise<Version | null> {
     const data = await json<{ version: Version | null }>(

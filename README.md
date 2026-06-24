@@ -39,6 +39,10 @@ distribution via `latexmk`.
   can **Save version** with a label anytime). Open **🕘 History** to browse versions
   and **Restore** any of them. Rollback is non-destructive (your current state is
   snapshotted first), backed by a hidden per-project Git repo.
+- **Auto-save safety net** — while a project is open, the source is committed to a
+  separate `overgrass-autosave` branch every ~2 minutes if it changed. Lost work is
+  recoverable from **🕘 History → Auto-saves**. These never clutter your main version
+  list.
 - **Compilation log panel** that pops open on errors.
 - **Export** the project back to a `.zip` at any time.
 

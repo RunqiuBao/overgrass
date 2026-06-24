@@ -39,6 +39,8 @@ export default function Workspace() {
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [lastAutosave, setLastAutosave] = useState<number | null>(null);
+  const [, setTick] = useState(0); // forces the "Xm ago" label to refresh
 
   // SyncTeX state
   const [pdfHighlight, setPdfHighlight] = useState<PdfHighlight | null>(null);
@@ -209,6 +211,35 @@ export default function Workspace() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [compiling]);
 
+  // Auto-save to the safety-net branch every 2 minutes (commits only if changed).
+  // A ref keeps the latest editor state without resetting the interval.
+  const autosaveRef = useRef<() => void>(() => {});
+  autosaveRef.current = async () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (openPath && dirty) await saveNow(openPath, content); // flush pending edits to disk first
+    try {
+      const res = await api.autosave(id);
+      if (res.saved) setLastAutosave(Date.now());
+    } catch {
+      /* safety net — ignore failures (e.g. git missing) */
+    }
+  };
+  useEffect(() => {
+    const t = setInterval(() => autosaveRef.current(), 120_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Seed the indicator from the latest existing auto-save, and tick every 30s
+  // so the "Xm ago" label stays current.
+  useEffect(() => {
+    api
+      .listHistory(id, 'autosave')
+      .then((list) => list.length && setLastAutosave(new Date(list[0].date).getTime()))
+      .catch(() => {});
+    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [id]);
+
   // --- File operations ------------------------------------------------------
 
   async function handleCreate(parentDir: string, type: 'file' | 'dir') {
@@ -378,6 +409,11 @@ export default function Workspace() {
           <span className="save-status small muted">
             {saving ? 'saving…' : dirty ? 'unsaved' : 'saved'}
           </span>
+          {lastAutosave && (
+            <span className="autosave-status small muted" title="Auto-saved to the safety-net branch">
+              ✓ auto-saved {agoLabel(lastAutosave)}
+            </span>
+          )}
         </div>
         <div className="ws-actions">
           <button
@@ -544,6 +580,14 @@ export default function Workspace() {
       )}
     </div>
   );
+}
+
+function agoLabel(ms: number): string {
+  const s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ago`;
 }
 
 function findFirstTex(nodes: FileNode[]): string | null {

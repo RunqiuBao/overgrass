@@ -29,7 +29,7 @@ import {
 import { compileProject, checkLatexmk, currentPdfPath } from './compile.js';
 import { forwardSearch, inverseSearch, checkSynctex } from './synctex.js';
 import { ask as assistantAsk, diagnose as assistantDiagnose, status as assistantStatus, saveCredential as assistantSaveCredential } from './assistant.js';
-import { listHistory, snapshot as historySnapshot, snapshotQuiet, restore as historyRestore } from './history.js';
+import { listHistory, listAutosaves, autosave as historyAutosave, snapshot as historySnapshot, snapshotQuiet, restore as historyRestore } from './history.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -289,7 +289,13 @@ app.get('/api/projects/:id/pdf-current', wrap(async (req, res) => {
 // --- History ----------------------------------------------------------------
 
 app.get('/api/projects/:id/history', wrap(async (req, res) => {
-  res.json(await listHistory(req.params.id));
+  const list = req.query.branch === 'autosave' ? listAutosaves : listHistory;
+  res.json(await list(req.params.id));
+}));
+
+app.post('/api/projects/:id/autosave', wrap(async (req, res) => {
+  const version = await historyAutosave(req.params.id);
+  res.json({ saved: version !== null, version });
 }));
 
 app.post('/api/projects/:id/history', wrap(async (req, res) => {

@@ -20,13 +20,15 @@ function timeAgo(iso: string): string {
 }
 
 export default function HistoryPanel({ projectId, onRestored, onClose }: Props) {
+  const [tab, setTab] = useState<'main' | 'autosave'>('main');
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
+    setVersions(null);
     try {
-      setVersions(await api.listHistory(projectId));
+      setVersions(await api.listHistory(projectId, tab === 'autosave' ? 'autosave' : undefined));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -37,7 +39,7 @@ export default function HistoryPanel({ projectId, onRestored, onClose }: Props) 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, tab]);
 
   async function saveVersion() {
     const message = prompt('Name this version (optional):', '');
@@ -86,6 +88,28 @@ export default function HistoryPanel({ projectId, onRestored, onClose }: Props) 
           </div>
         </div>
 
+        <div className="history-tabs">
+          <button
+            className={`history-tab${tab === 'main' ? ' active' : ''}`}
+            onClick={() => setTab('main')}
+          >
+            Versions
+          </button>
+          <button
+            className={`history-tab${tab === 'autosave' ? ' active' : ''}`}
+            onClick={() => setTab('autosave')}
+          >
+            Auto-saves
+          </button>
+        </div>
+
+        {tab === 'autosave' && (
+          <p className="muted small history-hint">
+            Automatic safety-net snapshots (every ~2 min while editing, if changed). Restore one to
+            recover lost work.
+          </p>
+        )}
+
         {error && <div className="banner banner-error">{error}</div>}
 
         <div className="history-body">
@@ -95,27 +119,30 @@ export default function HistoryPanel({ projectId, onRestored, onClose }: Props) 
             <p className="muted small" style={{ padding: 12 }}>No versions yet.</p>
           ) : (
             <ul className="history-list">
-              {versions.map((v, i) => (
-                <li key={v.hash} className="history-row">
-                  <div className="history-row-main">
-                    <span className="history-msg">
-                      {v.message}
-                      {i === 0 && <span className="history-current"> · current</span>}
-                    </span>
-                    <span className="muted small">
-                      {timeAgo(v.date)} · {v.hash.slice(0, 8)}
-                    </span>
-                  </div>
-                  <button
-                    className="btn btn-sm"
-                    disabled={busy || i === 0}
-                    title={i === 0 ? 'This is the current version' : 'Roll back to this version'}
-                    onClick={() => restore(v, i === 0)}
-                  >
-                    ⤺ Restore
-                  </button>
-                </li>
-              ))}
+              {versions.map((v, i) => {
+                const isCurrent = tab === 'main' && i === 0;
+                return (
+                  <li key={v.hash} className="history-row">
+                    <div className="history-row-main">
+                      <span className="history-msg">
+                        {v.message}
+                        {isCurrent && <span className="history-current"> · current</span>}
+                      </span>
+                      <span className="muted small">
+                        {timeAgo(v.date)} · {v.hash.slice(0, 8)}
+                      </span>
+                    </div>
+                    <button
+                      className="btn btn-sm"
+                      disabled={busy || isCurrent}
+                      title={isCurrent ? 'This is the current version' : 'Roll back to this version'}
+                      onClick={() => restore(v, isCurrent)}
+                    >
+                      ⤺ Restore
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

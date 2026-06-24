@@ -2,8 +2,12 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { resolveInProject } from './store.js';
+
+const AUTOSAVE_BRANCH = 'overgrass-autosave';
+const AUTOSAVE_REF = `refs/heads/${AUTOSAVE_BRANCH}`;
 
 /**
  * Per-project version history backed by a hidden Git repo in each project dir.
@@ -34,9 +38,25 @@ export async function checkGit(): Promise<boolean> {
   return gitAvailable;
 }
 
-async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer: 16 * 1024 * 1024 });
+async function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd,
+    env: env ?? process.env,
+    maxBuffer: 16 * 1024 * 1024,
+  });
   return stdout;
+}
+
+function parseLog(out: string): Version[] {
+  if (!out.trim()) return [];
+  return out.split('\n').map((line) => {
+    const [hash, ts, ...rest] = line.split('\x1f');
+    return {
+      hash,
+      date: new Date(Number(ts) * 1000).toISOString(),
+      message: rest.join('\x1f'),
+    };
+  });
 }
 
 async function ensureRepo(id: string): Promise<string> {
@@ -86,16 +106,65 @@ export async function snapshotQuiet(id: string, message: string): Promise<void> 
 export async function listHistory(id: string, limit = 200): Promise<Version[]> {
   const cwd = await ensureRepo(id);
   // Unit-separator (\x1f) between fields; one commit per line.
-  const out = await git(cwd, ['log', `--max-count=${limit}`, '--pretty=format:%H%x1f%ct%x1f%s']);
-  if (!out.trim()) return [];
-  return out.split('\n').map((line) => {
-    const [hash, ts, ...rest] = line.split('\x1f');
-    return {
-      hash,
-      date: new Date(Number(ts) * 1000).toISOString(),
-      message: rest.join('\x1f'),
-    };
-  });
+  return parseLog(await git(cwd, ['log', `--max-count=${limit}`, '--pretty=format:%H%x1f%ct%x1f%s']));
+}
+
+/** Commits on the auto-save branch (the every-2-min safety net). */
+export async function listAutosaves(id: string, limit = 100): Promise<Version[]> {
+  const cwd = await ensureRepo(id);
+  const exists = (await git(cwd, ['rev-parse', '-q', '--verify', AUTOSAVE_REF]).catch(() => '')).trim();
+  if (!exists) return [];
+  // `--not HEAD` keeps only the auto-save-exclusive commits (drops the main-branch
+  // ancestor they branched from).
+  return parseLog(
+    await git(cwd, [
+      'log',
+      AUTOSAVE_BRANCH,
+      '--not',
+      'HEAD',
+      `--max-count=${limit}`,
+      '--pretty=format:%H%x1f%ct%x1f%s',
+    ]),
+  );
+}
+
+/**
+ * Commit the current working tree to the auto-save branch IF it differs from the
+ * last auto-save and from the main branch tip. Uses a throwaway index + git
+ * plumbing, so it never disturbs the working branch, HEAD, or checked-out files.
+ * Returns the new version, or null when there was nothing new to save.
+ */
+export async function autosave(id: string): Promise<Version | null> {
+  const cwd = await ensureRepo(id);
+  const tmpIndex = path.join(os.tmpdir(), `overgrass-autosave-${id}.index`);
+  await fsp.rm(tmpIndex, { force: true }).catch(() => {});
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_INDEX_FILE: tmpIndex };
+  try {
+    // Stage the full working tree into the temp index (.build/.overgrass.json excluded).
+    await git(cwd, ['add', '-A'], env);
+    const tree = (await git(cwd, ['write-tree'], env)).trim();
+
+    const lastAuto = (await git(cwd, ['rev-parse', '-q', '--verify', AUTOSAVE_REF]).catch(() => '')).trim();
+    const head = (await git(cwd, ['rev-parse', '-q', '--verify', 'HEAD']).catch(() => '')).trim();
+    const treeOf = async (commit: string) =>
+      commit ? (await git(cwd, ['rev-parse', `${commit}^{tree}`]).catch(() => '')).trim() : '';
+    const autoTree = await treeOf(lastAuto);
+    const headTree = await treeOf(head);
+
+    // Nothing new if it already matches the latest auto-save or the main tip.
+    if (tree === autoTree || tree === headTree) return null;
+
+    const msg = 'Auto-save';
+    const parent = lastAuto || head;
+    const commitArgs = ['commit-tree', tree];
+    if (parent) commitArgs.push('-p', parent);
+    commitArgs.push('-m', msg);
+    const commit = (await git(cwd, commitArgs)).trim();
+    await git(cwd, ['update-ref', AUTOSAVE_REF, commit]);
+    return { hash: commit, date: new Date().toISOString(), message: msg };
+  } finally {
+    await fsp.rm(tmpIndex, { force: true }).catch(() => {});
+  }
 }
 
 /** Non-destructively restore the project to a previous version. */

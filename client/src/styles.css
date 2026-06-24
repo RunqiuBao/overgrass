@@ -249,6 +249,7 @@ a { color: var(--green); }
 }
 .back-link:hover { background: rgba(255, 255, 255, 0.08); }
 .save-status { margin-left: 4px; }
+.autosave-status { color: var(--green); }
 .ws-actions { display: flex; gap: 8px; }
 
 .ws-body { flex: 1; display: flex; min-height: 0; }
@@ -470,6 +471,19 @@ body.resizing-col iframe { pointer-events: none; }
   flex-shrink: 0;
 }
 .history-header-actions { display: flex; align-items: center; gap: 8px; }
+.history-tabs { display: flex; gap: 4px; padding: 8px 14px 0; flex-shrink: 0; }
+.history-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-bottom: 2px solid transparent;
+}
+.history-tab:hover { color: var(--text); }
+.history-tab.active { color: var(--green); border-bottom-color: var(--green); }
+.history-hint { margin: 6px 14px 0; }
 .history-body { overflow: auto; }
 .history-list { list-style: none; margin: 0; padding: 0; }
 .history-row {
