@@ -1,0 +1,23 @@
+services:
+  overgrass:
+    build:
+      context: .
+      args:
+        # Override to slim down the image, e.g.:
+        #   TEX_PACKAGES: "texlive-latex-extra texlive-bibtex-extra texlive-fonts-recommended biber latexmk"
+        TEX_PACKAGES: "texlive-full latexmk"
+    image: overgrass:latest
+    container_name: overgrass
+    ports:
+      - "${PORT:-3001}:3001"
+    volumes:
+      # Named volume keeps your projects across restarts/rebuilds.
+      # To store them in a folder you choose instead, replace the line below
+      # with a host path bind mount, e.g.:
+      #   - /home/you/overgrass-projects:/data
+      # (or use ${OVERGRASS_DATA_DIR:-overgrass-data}:/data and set that env var)
+      - overgrass-data:/data
+    restart: unless-stopped
+
+volumes:
+  overgrass-data:

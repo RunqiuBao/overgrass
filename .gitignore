@@ -1,0 +1,22 @@
+__pycache__
+*.vscode
+cfg.yaml
+*.pth
+*.pkl
+*.pyc
+*.so
+*.egg-info
+# Ignore weight files but keep the folder structure
+weights/*
+!weights/.gitkeep
+output/
+.claude/
+cpp/build/
+
+# Node
+node_modules/
+
+# Build output
+client/dist/
+server/dist/
+*.tsbuildinfo

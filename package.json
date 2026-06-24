@@ -1,0 +1,28 @@
+{
+  "name": "overgrass",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A local, self-hosted Overleaf clone. Edit your downloaded Overleaf projects locally with a LaTeX editor and live PDF preview.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm -w server run dev",
+    "dev:client": "npm -w client run dev",
+    "build": "npm -w server run build && npm -w client run build",
+    "start": "npm -w server run start",
+    "check:tex": "node scripts/check-tex.mjs",
+    "docker:build": "bash scripts/docker.sh build",
+    "docker:up": "bash scripts/docker.sh up",
+    "docker:down": "bash scripts/docker.sh down",
+    "docker:logs": "bash scripts/docker.sh logs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
