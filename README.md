@@ -34,32 +34,6 @@ distribution via `latexmk`.
 - **Compilation log panel** that pops open on errors.
 - **Export** the project back to a `.zip` at any time.
 
-## Prerequisites
-
-> Using **Docker**? You only need Docker installed — skip the rest of this
-> section and jump to [Quick start with Docker](#quick-start-with-docker-recommended).
-> The image ships Node + TeX.
-
-For a local (non-Docker) setup:
-
-- **Node.js ≥ 18**
-- A **TeX distribution** providing `latexmk` (and `pdflatex`, `biber`). On
-  Debian/Ubuntu:
-
-  ```bash
-  sudo apt-get install texlive-full latexmk
-  ```
-
-  > `texlive-full` is large (~5 GB). For a slimmer setup you can install
-  > `texlive-latex-extra texlive-bibtex-extra latexmk biber` and add packages as
-  > needed. You can edit projects without TeX installed; you just can't compile.
-
-Check your toolchain:
-
-```bash
-npm run check:tex
-```
-
 ## Quick start with Docker (recommended)
 
 The Docker image bundles **Node + a full TeX distribution**, so you don't need
@@ -125,19 +99,6 @@ docker compose up -d --build
 
 Configuration env vars for the script: `PORT` (host port, default 3001),
 `IMAGE`, `CONTAINER`, `DATA_VOLUME`, `TEX_PACKAGES`.
-
-### Changing the logo (no rebuild)
-
-The logo is served at runtime from `/api/branding/logo`, so you can swap it
-without rebuilding the image. Drop a file into the bind-mounted data dir:
-
-```bash
-mkdir -p <your-data-dir>/branding
-cp my-logo.png <your-data-dir>/branding/logo.png   # .png/.svg/.jpg/.webp/.gif
-```
-
-…then refresh the browser. Resolution order: `OVERGRASS_LOGO` env var →
-`<data>/branding/logo.<ext>` → the bundled default (`resources/overgrass-logo.png`).
 
 ## Local development (without Docker)
 
