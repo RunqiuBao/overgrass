@@ -125,6 +125,13 @@ export const api = {
   pdfUrl(id: string, pdfPath: string): string {
     return `${BASE}/projects/${id}/pdf?path=${encodeURIComponent(pdfPath)}`;
   },
+  /** Project-relative path to the last-built PDF, or null if none exists yet. */
+  async currentPdf(id: string): Promise<string | null> {
+    const data = await json<{ pdfPath: string | null }>(
+      await fetch(`${BASE}/projects/${id}/pdf-current`),
+    );
+    return data.pdfPath;
+  },
 
   // Claude assistant
   async assistantStatus(): Promise<{

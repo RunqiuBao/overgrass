@@ -117,6 +117,13 @@ export default function Workspace() {
         setTree(nodes);
         const first = meta.mainFile ?? findFirstTex(nodes);
         if (first) await openFile(first);
+        // Show the previously-built PDF (if any) without forcing a recompile.
+        try {
+          const pdf = await api.currentPdf(id);
+          if (pdf) setPdfUrl(`${api.pdfUrl(id, pdf)}&t=${Date.now()}`);
+        } catch {
+          /* no prior build — leave the PDF pane empty */
+        }
       } catch (e) {
         setError((e as Error).message);
       }

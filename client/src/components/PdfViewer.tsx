@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { TextLayer } from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 // Vite resolves this to a URL string for the worker bundle.
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -36,6 +38,7 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
 
   const canvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
   const wrapRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const textRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const overlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load the document whenever the URL changes.
@@ -89,6 +92,7 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
     let cancelled = false;
     // Structural type matching the parts of a PDF.js RenderTask we use.
     const tasks: { cancel: () => void; promise: Promise<void> }[] = [];
+    const textLayers: TextLayer[] = [];
     (async () => {
       const dpr = window.devicePixelRatio || 1;
       for (const dim of pages) {
@@ -116,6 +120,25 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
           // RenderingCancelledException when a newer render supersedes this one.
           return;
         }
+
+        // Overlay a selectable text layer (transparent positioned glyphs) so
+        // users can highlight/copy text from the rendered page.
+        const textDiv = textRefs.current[dim.num];
+        if (textDiv) {
+          textDiv.textContent = ''; // clear any previous render (e.g. on zoom)
+          const textLayer = new TextLayer({
+            textContentSource: page.streamTextContent(),
+            container: textDiv,
+            viewport: vp,
+          });
+          textLayers.push(textLayer);
+          try {
+            await textLayer.render();
+          } catch {
+            // cancelled by a newer render
+            return;
+          }
+        }
       }
     })();
     return () => {
@@ -123,6 +146,13 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
       for (const t of tasks) {
         try {
           t.cancel();
+        } catch {
+          /* already settled */
+        }
+      }
+      for (const tl of textLayers) {
+        try {
+          tl.cancel();
         } catch {
           /* already settled */
         }
@@ -186,12 +216,13 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
           <div
             key={dim.num}
             className="pdf-page-wrap"
-            style={{ width: dim.w, height: dim.h }}
+            style={{ width: dim.w, height: dim.h, '--scale-factor': scale } as CSSProperties}
             ref={(el) => (wrapRefs.current[dim.num] = el)}
             onDoubleClick={(e) => handleDoubleClick(e, dim.num)}
             title="Double-click to jump to source"
           >
             <canvas className="pdf-page" ref={(el) => (canvasRefs.current[dim.num] = el)} />
+            <div className="textLayer" ref={(el) => (textRefs.current[dim.num] = el)} />
             {overlay && overlay.page === dim.num && (
               <div
                 className="pdf-highlight"

@@ -26,7 +26,7 @@ import {
   resolveInProject,
   DATA_DIR,
 } from './store.js';
-import { compileProject, checkLatexmk } from './compile.js';
+import { compileProject, checkLatexmk, currentPdfPath } from './compile.js';
 import { forwardSearch, inverseSearch, checkSynctex } from './synctex.js';
 import { ask as assistantAsk, diagnose as assistantDiagnose, status as assistantStatus, saveCredential as assistantSaveCredential } from './assistant.js';
 import { listHistory, snapshot as historySnapshot, snapshotQuiet, restore as historyRestore } from './history.js';
@@ -278,6 +278,12 @@ app.post('/api/projects/:id/compile', wrap(async (req, res) => {
   // Checkpoint the source on each compile (only commits if it changed).
   await snapshotQuiet(req.params.id, 'Auto-saved on compile');
   res.json(await compileProject(req.params.id));
+}));
+
+// Report the already-built PDF (from a previous compile), so the editor can
+// show it immediately on open without forcing a recompile.
+app.get('/api/projects/:id/pdf-current', wrap(async (req, res) => {
+  res.json({ pdfPath: await currentPdfPath(req.params.id) });
 }));
 
 // --- History ----------------------------------------------------------------

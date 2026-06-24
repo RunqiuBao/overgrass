@@ -6,6 +6,19 @@ import { BUILD_DIRNAME, resolveInProject, resolveMainFile } from './store.js';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Project-relative path to the already-built PDF (under .build/) for the
+ * project's main file, if one exists on disk. Lets the editor show the last
+ * compiled PDF immediately on open, without recompiling.
+ */
+export async function currentPdfPath(id: string): Promise<string | null> {
+  const mainFile = await resolveMainFile(id);
+  if (!mainFile) return null;
+  const base = path.basename(mainFile, path.extname(mainFile));
+  const rel = `${BUILD_DIRNAME}/${base}.pdf`;
+  return fs.existsSync(resolveInProject(id, rel)) ? rel : null;
+}
+
 export interface CompileResult {
   /** True when a PDF was produced (it may still contain non-fatal errors). */
   success: boolean;
