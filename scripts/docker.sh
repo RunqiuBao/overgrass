@@ -126,10 +126,16 @@ up() {
   echo ">> Removing any existing container named ${CONTAINER}"
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
   echo ">> Starting ${CONTAINER}"
+  # Forward Claude assistant config into the container when set on the host.
+  ENV_ARGS=()
+  for var in ANTHROPIC_API_KEY OVERGRASS_ANTHROPIC_KEY CLAUDE_CODE_OAUTH_TOKEN OVERGRASS_CLAUDE_MODEL; do
+    if [ -n "${!var:-}" ]; then ENV_ARGS+=(-e "${var}=${!var}"); fi
+  done
   docker run -d \
     --name "${CONTAINER}" \
     -p "${PORT}:3001" \
     -v "${DATA_MOUNT}" \
+    ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} \
     --restart unless-stopped \
     "${IMAGE}"
   echo ""

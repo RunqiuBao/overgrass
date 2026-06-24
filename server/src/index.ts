@@ -28,6 +28,7 @@ import {
 } from './store.js';
 import { compileProject, checkLatexmk } from './compile.js';
 import { forwardSearch, inverseSearch, checkSynctex } from './synctex.js';
+import { ask as assistantAsk, status as assistantStatus, saveCredential as assistantSaveCredential } from './assistant.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -72,6 +73,31 @@ const wrap =
 
 app.get('/api/health', wrap(async (_req, res) => {
   res.json({ ok: true, latexmk: await checkLatexmk(), synctex: await checkSynctex() });
+}));
+
+// --- Claude assistant -------------------------------------------------------
+
+app.get('/api/assistant/status', wrap(async (_req, res) => {
+  res.json(assistantStatus());
+}));
+
+app.post('/api/assistant/key', wrap(async (req, res) => {
+  const { apiKey } = req.body ?? {};
+  if (typeof apiKey !== 'string' || !apiKey.trim()) {
+    res.status(400).json({ error: 'Expected { apiKey }.' });
+    return;
+  }
+  const mode = await assistantSaveCredential(apiKey);
+  res.json({ ok: true, configured: true, mode });
+}));
+
+app.post('/api/assistant/ask', wrap(async (req, res) => {
+  const { selection, prompt, fileName, language } = req.body ?? {};
+  if (typeof selection !== 'string' || typeof prompt !== 'string') {
+    res.status(400).json({ error: 'Expected { selection, prompt }.' });
+    return;
+  }
+  res.json({ suggestion: await assistantAsk({ selection, prompt, fileName, language }) });
 }));
 
 // Logo served at runtime (replaceable without rebuilding — see resolveLogoPath).

@@ -126,6 +126,39 @@ export const api = {
     return `${BASE}/projects/${id}/pdf?path=${encodeURIComponent(pdfPath)}`;
   },
 
+  // Claude assistant
+  async assistantStatus(): Promise<{
+    configured: boolean;
+    mode: 'subscription' | 'api' | null;
+    source: 'env' | 'file' | null;
+  }> {
+    return json(await fetch(`${BASE}/assistant/status`));
+  },
+  async assistantSetKey(apiKey: string): Promise<void> {
+    await json(
+      await fetch(`${BASE}/assistant/key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      }),
+    );
+  },
+  async assistantAsk(params: {
+    selection: string;
+    prompt: string;
+    fileName?: string;
+    language?: string;
+  }): Promise<string> {
+    const data = await json<{ suggestion: string }>(
+      await fetch(`${BASE}/assistant/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      }),
+    );
+    return data.suggestion;
+  },
+
   // SyncTeX
   async synctexForward(id: string, file: string, line: number, column = 0): Promise<ForwardHit[]> {
     const q = `file=${encodeURIComponent(file)}&line=${line}&column=${column}`;

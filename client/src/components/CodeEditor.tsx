@@ -20,6 +20,17 @@ interface Props {
   /** When this nonce changes, scroll to and flash `revealLine` (inverse search). */
   revealLine?: number | null;
   revealNonce?: number;
+  /** Ctrl/Cmd+right-click on a selection -> open the Claude assistant. */
+  onContextRequest?: (info: {
+    text: string;
+    from: number;
+    to: number;
+    x: number;
+    y: number;
+  }) => void;
+  /** When this nonce changes, replace [from,to] with `text` (assistant substitute). */
+  applyEdit?: { from: number; to: number; text: string } | null;
+  applyEditNonce?: number;
 }
 
 export default function CodeEditor({
@@ -31,14 +42,19 @@ export default function CodeEditor({
   onDoubleClickLine,
   revealLine,
   revealNonce,
+  onContextRequest,
+  applyEdit,
+  applyEditNonce,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   // Keep latest callbacks without recreating the editor on every render.
   const onChangeRef = useRef(onChange);
   const onDoubleClickRef = useRef(onDoubleClickLine);
+  const onContextRef = useRef(onContextRequest);
   onChangeRef.current = onChange;
   onDoubleClickRef.current = onDoubleClickLine;
+  onContextRef.current = onContextRequest;
 
   // (Re)create the editor whenever the open document or language changes.
   useEffect(() => {
@@ -61,6 +77,22 @@ export default function CodeEditor({
           const line = v.state.doc.lineAt(pos);
           onDoubleClickRef.current?.(line.number, pos - line.from + 1);
           return false; // let CodeMirror keep its default word-selection
+        },
+        contextmenu(event, v) {
+          // Ctrl/Cmd + right-click on a selection opens the Claude assistant.
+          if (!event.ctrlKey && !event.metaKey) return false; // normal right-click menu
+          const sel = v.state.selection.main;
+          const text = v.state.sliceDoc(sel.from, sel.to);
+          if (!text.trim()) return false; // need a selection
+          event.preventDefault();
+          onContextRef.current?.({
+            text,
+            from: sel.from,
+            to: sel.to,
+            x: event.clientX,
+            y: event.clientY,
+          });
+          return true;
         },
       }),
       EditorView.lineWrapping,
@@ -96,6 +128,21 @@ export default function CodeEditor({
     v.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce]);
+
+  // Assistant substitute: replace a range with the suggested text.
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !applyEdit) return;
+    const len = v.state.doc.length;
+    const from = Math.min(Math.max(0, applyEdit.from), len);
+    const to = Math.min(Math.max(from, applyEdit.to), len);
+    v.dispatch({
+      changes: { from, to, insert: applyEdit.text },
+      selection: { anchor: from + applyEdit.text.length },
+    });
+    v.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyEditNonce]);
 
   // Sync external value changes (e.g. switching files) into the editor.
   useEffect(() => {

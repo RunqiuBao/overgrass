@@ -31,6 +31,10 @@ distribution via `latexmk`.
     flashes the matching spot.
   - **PDF → source**: double-click anywhere in the PDF; the matching source file
     opens and the editor jumps to that line.
+- **Claude AI assistant** — select text in the editor and **Ctrl/Cmd + right-click**
+  to open a floating assistant: your selection is pre-loaded, you add an
+  instruction (rewrite, fix, translate, explain…), and you choose whether to
+  **replace the selection** with Claude's suggestion. Click outside to dismiss.
 - **Compilation log panel** that pops open on errors.
 - **Export** the project back to a `.zip` at any time.
 
@@ -99,6 +103,46 @@ docker compose up -d --build
 
 Configuration env vars for the script: `PORT` (host port, default 3001),
 `IMAGE`, `CONTAINER`, `DATA_VOLUME`, `TEX_PACKAGES`.
+
+### Claude AI assistant
+
+Two billing options — the assistant prefers your subscription when a token is
+present, and falls back to an API key otherwise. Credentials are stored
+**server-side** in `<data>/claude-config.json` (never in the browser).
+
+**Option 1 — Claude Pro/Max subscription (no per-token cost).** Driven by the
+bundled Claude Code CLI. On a machine with a browser, generate a long-lived
+token:
+
+```bash
+claude setup-token        # one-time browser OAuth; prints an sk-ant-oat… token
+```
+
+Paste that token into the assistant's first-use prompt, or supply it via env:
+
+```bash
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat...  overgrass up
+```
+
+**Option 2 — Anthropic API key (pay-per-token).** Paste an `sk-ant-api…` key, or:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-api...  overgrass up
+```
+
+The credential type is auto-detected by prefix. Override the model with
+`OVERGRASS_CLAUDE_MODEL` (CLI aliases like `sonnet`/`opus` for the subscription
+path; a full id like `claude-opus-4-8` for the API path). Env vars take
+precedence over saved credentials.
+
+Usage: select text in the editor → **Ctrl/Cmd + right-click** → type an
+instruction → **Ask Claude** → **Replace selection** or **Keep original**.
+
+> **Subscription terms:** use this with **your own** Pro/Max subscription on your
+> **own** instance. Anthropic does not permit offering claude.ai/subscription
+> login to other users of a third-party app — don't expose this as a multi-user
+> "bring your own Claude login" service. The selected snippet plus your
+> instruction are sent to Anthropic when you click Ask.
 
 ## Local development (without Docker)
 

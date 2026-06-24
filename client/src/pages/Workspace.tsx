@@ -5,6 +5,7 @@ import type { CompileResult, FileNode, ProjectMeta } from '../types';
 import FileTree from '../components/FileTree';
 import CodeEditor from '../components/CodeEditor';
 import PdfViewer, { type PdfHighlight } from '../components/PdfViewer';
+import AssistantPopup from '../components/AssistantPopup';
 
 const TEXT_EXTS = ['.tex', '.txt', '.bib', '.cls', '.sty', '.md', '.markdown', '.json', '.yml', '.yaml', '.bst', '.csv', '.cfg', '.toml'];
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'];
@@ -40,6 +41,11 @@ export default function Workspace() {
   const [revealLine, setRevealLine] = useState<number | null>(null);
   const [revealNonce, setRevealNonce] = useState(0);
   const syncNonce = useRef(0);
+
+  // Claude assistant state
+  const [assist, setAssist] = useState<{ x: number; y: number; text: string; from: number; to: number } | null>(null);
+  const [applyEdit, setApplyEdit] = useState<{ from: number; to: number; text: string } | null>(null);
+  const [applyEditNonce, setApplyEditNonce] = useState(0);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
@@ -256,6 +262,15 @@ export default function Workspace() {
     }
   }
 
+  // --- Claude assistant -----------------------------------------------------
+
+  function handleAssistReplace(text: string) {
+    if (!assist) return;
+    setApplyEdit({ from: assist.from, to: assist.to, text });
+    setApplyEditNonce((n) => n + 1);
+    setAssist(null);
+  }
+
   return (
     <div className="workspace">
       <header className="ws-header">
@@ -323,6 +338,9 @@ export default function Workspace() {
                 onDoubleClickLine={handleForwardSync}
                 revealLine={revealLine}
                 revealNonce={revealNonce}
+                onContextRequest={(info) => setAssist(info)}
+                applyEdit={applyEdit}
+                applyEditNonce={applyEditNonce}
               />
             ) : isImage(openPath) ? (
               <div className="asset-preview">
@@ -371,6 +389,18 @@ export default function Workspace() {
           )}
           <pre className="log-body">{result?.log ?? 'No log yet. Press Recompile.'}</pre>
         </div>
+      )}
+
+      {assist && (
+        <AssistantPopup
+          x={assist.x}
+          y={assist.y}
+          selection={assist.text}
+          fileName={openPath ?? undefined}
+          language={openPath && extOf(openPath) === '.tex' ? 'LaTeX' : 'text'}
+          onReplace={handleAssistReplace}
+          onClose={() => setAssist(null)}
+        />
       )}
     </div>
   );

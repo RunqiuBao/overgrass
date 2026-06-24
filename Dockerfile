@@ -29,8 +29,16 @@ ARG TEX_PACKAGES="texlive-full latexmk"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ${TEX_PACKAGES} \
+ && apt-get install -y --no-install-recommends ${TEX_PACKAGES} curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI — enables the optional Claude Pro/Max subscription path for the
+# in-app assistant (set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`).
+# Best-effort: if the install fails, the API-key assistant path still works and
+# the subscription path returns a clear "CLI not found" message at runtime.
+ENV PATH="/root/.local/bin:${PATH}"
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+ || echo "WARNING: Claude Code CLI install failed; subscription assistant path will be unavailable."
 
 WORKDIR /app
 ENV NODE_ENV=production
