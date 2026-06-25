@@ -33,6 +33,7 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [pages, setPages] = useState<PageDim[]>([]);
   const [scale, setScale] = useState(1.2);
+  const [brightness, setBrightness] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<{ page: number; left: number; top: number; w: number; h: number } | null>(null);
 
@@ -197,6 +198,25 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
         <button className="icon-btn" onClick={() => setScale((s) => Math.min(3, s + 0.2))} title="Zoom in">
           +
         </button>
+        <span className="pdf-bright" title={`Brightness ${Math.round(brightness * 100)}%`}>
+          <button
+            className="icon-btn"
+            onClick={() => setBrightness(1)}
+            title="Reset brightness"
+            aria-hidden
+          >
+            ☀
+          </button>
+          <input
+            type="range"
+            min={0.3}
+            max={1.1}
+            step={0.05}
+            value={brightness}
+            onChange={(e) => setBrightness(Number(e.target.value))}
+            aria-label="PDF brightness"
+          />
+        </span>
         {doc && <span className="small muted">{doc.numPages} page{doc.numPages > 1 ? 's' : ''}</span>}
         <span className="small muted synctex-hint" title="Double-click the PDF to jump to the source line">
           ⤢ dbl-click to sync
@@ -211,7 +231,11 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
       {!url && !error && (
         <div className="pdf-empty muted">No PDF yet — press Recompile to build the document.</div>
       )}
-      <div className="pdf-pages" ref={scroller}>
+      <div
+        className="pdf-pages"
+        ref={scroller}
+        style={{ '--pdf-brightness': brightness } as CSSProperties}
+      >
         {pages.map((dim) => (
           <div
             key={dim.num}
