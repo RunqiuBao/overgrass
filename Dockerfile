@@ -1,4 +1,6 @@
-# syntax=docker/dockerfile:1
+# NOTE: intentionally no `# syntax=` directive — it would make BuildKit fetch the
+# dockerfile frontend image from Docker Hub, breaking offline (cached) rebuilds.
+# Our Dockerfile uses only standard instructions, so the built-in frontend suffices.
 
 # =============================================================================
 # Stage 1 — build: install all deps and compile the client + server bundles.

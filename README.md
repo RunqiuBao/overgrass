@@ -66,7 +66,8 @@ On its first run, the script installs an `overgrass` shell function into
 source ~/.bashrc                       # once (new terminals get it automatically)
 DATA_DIR=~/overgrass-projects overgrass up
 overgrass logs
-overgrass restart
+overgrass restart      # restart the existing container (no rebuild, offline-safe)
+overgrass recreate     # rebuild the image + recreate the container (after code changes)
 overgrass down
 ```
 
@@ -90,7 +91,8 @@ easy to back up or open with other tools.
 ```bash
 scripts/docker.sh logs      # follow logs
 scripts/docker.sh down      # stop & remove the container
-scripts/docker.sh restart   # rebuild + restart
+scripts/docker.sh restart   # restart the existing container (no rebuild)
+scripts/docker.sh recreate  # rebuild the image + recreate (after code changes)
 ```
 
 Or with Docker Compose:

@@ -61,9 +61,10 @@ Usage:
   overgrass -h | --help
 
 Commands:
-  up         Build the image (if needed) and start the container   [default]
+  up         Start the container (builds the image only on first run) [default]
+  restart    Restart the existing container — no rebuild (offline-safe)
+  recreate   Rebuild the image and recreate the container (after code changes)
   down       Stop and remove the container
-  restart    down + up (rebuild and restart)
   build      Build the image only
   logs       Follow the container logs
   shell      Open a shell inside the running container
@@ -121,8 +122,8 @@ build() {
   docker build --build-arg TEX_PACKAGES="${TEX_PACKAGES}" -t "${IMAGE}" .
 }
 
-up() {
-  build
+# (Re)create the container from the existing image — no build. Works offline.
+run_container() {
   echo ">> Removing any existing container named ${CONTAINER}"
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
   echo ">> Starting ${CONTAINER}"
@@ -144,6 +145,35 @@ up() {
   echo "   Follow logs with:  scripts/docker.sh logs"
 }
 
+# Bring the app up. Builds the image only if it doesn't exist yet, so repeat
+# runs (and offline runs) just start the existing image.
+up() {
+  if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then build; fi
+  run_container
+}
+
+# Rebuild the image and recreate the container — use after you change code.
+recreate() {
+  build
+  run_container
+}
+
+# Restart the existing container without rebuilding (offline-safe, picks up
+# env-var changes when the container has to be re-created from the image).
+restart() {
+  if docker container inspect "${CONTAINER}" >/dev/null 2>&1; then
+    echo ">> Restarting ${CONTAINER}"
+    docker restart "${CONTAINER}"
+    echo "   Overgrass at http://localhost:${PORT}"
+  elif docker image inspect "${IMAGE}" >/dev/null 2>&1; then
+    echo ">> No container yet — creating one from the existing image (no rebuild)."
+    run_container
+  else
+    echo "error: nothing to restart — run 'overgrass up' first (needs internet)." >&2
+    exit 1
+  fi
+}
+
 down() {
   echo ">> Stopping and removing ${CONTAINER}"
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
@@ -153,7 +183,8 @@ case "${1:-up}" in
   build)            build ;;
   up)               up ;;
   down)             down ;;
-  restart)          down; up ;;
+  restart)          restart ;;
+  recreate)         recreate ;;
   logs)             docker logs -f "${CONTAINER}" ;;
   shell)            docker exec -it "${CONTAINER}" bash ;;
   help|-h|--help)   usage ;;
