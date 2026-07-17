@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import type { CompileResult, FileNode, ProjectMeta } from '../types';
 import FileTree from '../components/FileTree';
-import CodeEditor from '../components/CodeEditor';
+import CodeEditor, { type EditorPos } from '../components/CodeEditor';
 import PdfViewer, { type PdfHighlight } from '../components/PdfViewer';
 import AssistantPopup from '../components/AssistantPopup';
 import HistoryPanel from '../components/HistoryPanel';
@@ -21,6 +21,27 @@ function isText(path: string): boolean {
 }
 function isImage(path: string): boolean {
   return IMAGE_EXTS.includes(extOf(path));
+}
+
+/** Caret positions are remembered per project, keyed by file path. */
+function posKeyFor(id: string): string {
+  return `ws.pos.${id}`;
+}
+function readPositions(key: string): Map<string, EditorPos> {
+  const out = new Map<string, EditorPos>();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, EditorPos>;
+    for (const [path, p] of Object.entries(parsed)) {
+      // Storage is user-writable and outlives this code: drop anything that
+      // isn't a pair of real offsets rather than feed NaN to CodeMirror.
+      if (Number.isFinite(p?.anchor) && Number.isFinite(p?.head)) {
+        out.set(path, { anchor: p.anchor, head: p.head });
+      }
+    }
+  } catch {
+    /* unreadable or malformed — start fresh */
+  }
+  return out;
 }
 
 export default function Workspace() {
@@ -56,6 +77,47 @@ export default function Workspace() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const uploadDir = useRef<string>(''); // target folder for the next upload
+
+  // Caret position per file, so switching between (say) main.tex and refs.bib
+  // lands where you left off instead of at the top. Seeded from the previous
+  // session and re-seeded if the route ever swaps projects under us.
+  const posKey = posKeyFor(id);
+  const positions = useRef<Map<string, EditorPos> | null>(null);
+  const positionsKey = useRef<string | null>(null);
+  if (positionsKey.current !== posKey) {
+    positionsKey.current = posKey;
+    positions.current = readPositions(posKey);
+  }
+  // Renaming or deleting tears the editor down under the OLD path, and its
+  // cleanup would re-file the caret there. This redirects that last write.
+  const pendingPathChange = useRef<{ from: string; to: string | null } | null>(null);
+
+  const persistPositions = useCallback(() => {
+    try {
+      localStorage.setItem(posKey, JSON.stringify(Object.fromEntries(positions.current!)));
+    } catch {
+      /* quota or private mode — positions just won't survive a reload */
+    }
+  }, [posKey]);
+
+  const getPosition = useCallback((path: string) => positions.current!.get(path), []);
+
+  const savePosition = useCallback(
+    (path: string, pos: EditorPos) => {
+      const map = positions.current!;
+      const pending = pendingPathChange.current;
+      if (pending?.from === path) {
+        pendingPathChange.current = null;
+        map.delete(path);
+        if (pending.to) map.set(pending.to, pos); // renamed: follow the file
+        // else deleted: drop it
+      } else {
+        map.set(path, pos);
+      }
+      persistPositions();
+    },
+    [persistPositions],
+  );
 
   // Resizable panes. Widths (px) for the file-tree and PDF panes; the editor
   // pane flexes to fill whatever is left. Persisted across sessions.
@@ -133,21 +195,40 @@ export default function Workspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function openFile(path: string) {
-    // Persist pending edits before switching away.
+  /**
+   * Open a file, reporting whether it succeeded.
+   *
+   * Read before committing: React batches the two updates into a single render,
+   * so the editor is built around the correct text and can restore its caret
+   * against it. Committing `openPath` first would build the editor around the
+   * previous file's text and then correct it with a whole-document replace —
+   * which marks the file dirty and saves it straight back.
+   */
+  async function openFile(path: string): Promise<boolean> {
+    // Persist pending edits before switching away, and drop the debounced save
+    // so it can't fire a duplicate write afterwards.
+    if (saveTimer.current) clearTimeout(saveTimer.current);
     if (dirty && openPath) await saveNow(openPath, content);
-    setOpenPath(path);
-    if (isText(path)) {
-      try {
-        setContent(await api.readFile(id, path));
-        setDirty(false);
-      } catch (e) {
-        setError((e as Error).message);
-      }
-    } else {
+    setAssist(null); // its offsets point into the file we're leaving
+    if (!isText(path)) {
+      setOpenPath(path);
       setContent('');
       setDirty(false);
+      return true;
     }
+    let text: string;
+    try {
+      text = await api.readFile(id, path);
+    } catch (e) {
+      // Stay put. Moving openPath here would leave the previous file's text in
+      // the buffer, and the next keystroke would save it over `path`.
+      setError((e as Error).message);
+      return false;
+    }
+    setOpenPath(path);
+    setContent(text);
+    setDirty(false);
+    return true;
   }
 
   const saveNow = useCallback(
@@ -261,7 +342,20 @@ export default function Workspace() {
     if (!next || next === node.path) return;
     try {
       await api.renameEntry(id, node.path, next);
-      if (openPath === node.path) setOpenPath(next);
+      if (openPath === node.path) {
+        // The editor is about to be torn down under the old path; let its
+        // cleanup file the live caret under the new one.
+        pendingPathChange.current = { from: node.path, to: next };
+        setOpenPath(next);
+      } else {
+        // Nothing to tear down, so move any remembered caret ourselves.
+        const pos = positions.current!.get(node.path);
+        if (pos) {
+          positions.current!.delete(node.path);
+          positions.current!.set(next, pos);
+          persistPositions();
+        }
+      }
       await refreshTree();
     } catch (e) {
       setError((e as Error).message);
@@ -273,8 +367,13 @@ export default function Workspace() {
     try {
       await api.deleteEntry(id, node.path);
       if (openPath === node.path) {
+        // Suppress the teardown's write, so a file recreated under this name
+        // doesn't inherit a ghost caret.
+        pendingPathChange.current = { from: node.path, to: null };
         setOpenPath(null);
         setContent('');
+      } else if (positions.current!.delete(node.path)) {
+        persistPositions();
       }
       await refreshTree();
     } catch (e) {
@@ -345,7 +444,9 @@ export default function Workspace() {
     try {
       const hit = await api.synctexInverse(id, page, x, y);
       if (!hit || !hit.line) return;
-      if (hit.file && hit.file !== openPath) await openFile(hit.file);
+      // Bail if the file won't open, rather than revealing the line in whatever
+      // file is still on screen.
+      if (hit.file && hit.file !== openPath && !(await openFile(hit.file))) return;
       setRevealLine(hit.line);
       setRevealNonce((n) => n + 1);
     } catch (e) {
@@ -396,6 +497,10 @@ export default function Workspace() {
     setApplyEditNonce((n) => n + 1);
     setAssist(null);
   }
+
+  // Name the downloaded PDF after the project, sanitised the same way the .zip
+  // export does server-side, so the two downloads agree.
+  const pdfFileName = `${(project?.name ?? '').replace(/[^a-z0-9-_]+/gi, '_') || 'project'}.pdf`;
 
   return (
     <div className="workspace">
@@ -483,6 +588,8 @@ export default function Workspace() {
                 onContextRequest={(info) => setAssist(info)}
                 applyEdit={applyEdit}
                 applyEditNonce={applyEditNonce}
+                getPosition={getPosition}
+                savePosition={savePosition}
               />
             ) : isImage(openPath) ? (
               <div className="asset-preview">
@@ -507,7 +614,12 @@ export default function Workspace() {
         />
 
         <section className="pane pane-pdf" style={{ width: pdfWidth }}>
-          <PdfViewer url={pdfUrl} highlight={pdfHighlight} onReverse={handleInverseSync} />
+          <PdfViewer
+            url={pdfUrl}
+            highlight={pdfHighlight}
+            onReverse={handleInverseSync}
+            fileName={pdfFileName}
+          />
         </section>
       </div>
 

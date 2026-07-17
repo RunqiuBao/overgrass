@@ -379,6 +379,9 @@ body.resizing-col iframe { pointer-events: none; }
 .pdf-toolbar .icon-btn { color: var(--text); }
 .pdf-toolbar .icon-btn:hover { background: rgba(255, 255, 255, 0.12); }
 .pdf-toolbar .muted { color: var(--muted); }
+/* The pdf pane drags down to 240px; keep the label on one line rather than
+   letting the toolbar squish it. */
+.pdf-download { flex-shrink: 0; white-space: nowrap; }
 .pdf-pages {
   flex: 1;
   overflow: auto;

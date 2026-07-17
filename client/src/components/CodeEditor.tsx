@@ -8,6 +8,12 @@ import { StreamLanguage } from '@codemirror/language';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { oneDark } from '@codemirror/theme-one-dark';
 
+/** Where the caret sat in a document, remembered across file switches. */
+export interface EditorPos {
+  anchor: number;
+  head: number;
+}
+
 interface Props {
   /** Identity of the open document; changing it reloads editor content. */
   docKey: string;
@@ -15,6 +21,10 @@ interface Props {
   language: 'latex' | 'text';
   readOnly?: boolean;
   onChange: (value: string) => void;
+  /** Caret to restore when `docKey` opens, if it has been visited before. */
+  getPosition?: (docKey: string) => EditorPos | undefined;
+  /** Record the caret as `docKey` is torn down. */
+  savePosition?: (docKey: string, pos: EditorPos) => void;
   /** Double-click in the editor -> forward SyncTeX search to the PDF. */
   onDoubleClickLine?: (line: number, column: number) => void;
   /** When this nonce changes, scroll to and flash `revealLine` (inverse search). */
@@ -45,6 +55,8 @@ export default function CodeEditor({
   onContextRequest,
   applyEdit,
   applyEditNonce,
+  getPosition,
+  savePosition,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -52,9 +64,13 @@ export default function CodeEditor({
   const onChangeRef = useRef(onChange);
   const onDoubleClickRef = useRef(onDoubleClickLine);
   const onContextRef = useRef(onContextRequest);
+  const getPositionRef = useRef(getPosition);
+  const savePositionRef = useRef(savePosition);
   onChangeRef.current = onChange;
   onDoubleClickRef.current = onDoubleClickLine;
   onContextRef.current = onContextRequest;
+  getPositionRef.current = getPosition;
+  savePositionRef.current = savePosition;
 
   // (Re)create the editor whenever the open document or language changes.
   useEffect(() => {
@@ -105,12 +121,41 @@ export default function CodeEditor({
     if (language === 'latex') extensions.push(StreamLanguage.define(stex));
 
     const state = EditorState.create({ doc: value, extensions });
+
+    // Restore the caret from the last visit. The file may have changed on disk
+    // since (a history restore), so clamp against the built doc rather than
+    // `value`: CodeMirror normalises CRLF, so doc.length can be shorter than
+    // the raw string, and an out-of-range selection would throw.
+    const saved = getPositionRef.current?.(docKey);
+    const len = state.doc.length;
+    const clamp = (n: number) => (Number.isFinite(n) ? Math.min(Math.max(n, 0), len) : 0);
+    const restore = saved ? { anchor: clamp(saved.anchor), head: clamp(saved.head) } : null;
+
     const v = new EditorView({ state, parent: host.current });
     view.current = v;
+
+    if (restore) {
+      // Selection-only: docChanged stays false, so the updateListener above
+      // does not fire and this cannot mark the file dirty.
+      v.dispatch({
+        selection: restore,
+        effects: EditorView.scrollIntoView(restore.anchor, { y: 'center' }),
+      });
+      // CodeMirror hides the caret while unfocused, and clicking to focus would
+      // throw away the position we just restored.
+      v.focus();
+    }
+
     return () => {
+      // Runs before the next create (so `docKey` here is the outgoing document)
+      // and on unmount — opening an image or binary file drops this component.
+      const sel = v.state.selection.main;
+      savePositionRef.current?.(docKey, { anchor: sel.anchor, head: sel.head });
       v.destroy();
       view.current = null;
     };
+    // The reveal/applyEdit effects below must stay declared after this one, so
+    // they run after a (re)create and win over the restore above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey, language, readOnly]);
 
@@ -144,13 +189,23 @@ export default function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyEditNonce]);
 
-  // Sync external value changes (e.g. switching files) into the editor.
+  // Sync external value changes (e.g. a history restore) into the editor. A file
+  // switch rebuilds the view around the new text already, so this no-ops there.
   useEffect(() => {
     const v = view.current;
     if (!v) return;
     const current = v.state.doc.toString();
     if (current !== value) {
+      const sel = v.state.selection.main;
       v.dispatch({ changes: { from: 0, to: current.length, insert: value } });
+      // Put the caret back: a change spanning the whole document does not carry
+      // it through. Clamp against the rebuilt doc (CRLF may have been
+      // normalised away), and keep it a second, selection-only transaction so
+      // the length is known and no extra change event fires.
+      const len = v.state.doc.length;
+      v.dispatch({
+        selection: { anchor: Math.min(sel.anchor, len), head: Math.min(sel.head, len) },
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
