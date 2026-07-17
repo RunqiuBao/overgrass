@@ -19,6 +19,8 @@ interface Props {
   highlight: PdfHighlight | null;
   /** Double-click on the PDF -> inverse SyncTeX search. x,y in PDF points (top-left origin). */
   onReverse: (page: number, x: number, y: number) => void;
+  /** Filename for the download button; omit to hide it. */
+  fileName?: string;
 }
 
 interface PageDim {
@@ -28,7 +30,7 @@ interface PageDim {
   h: number;
 }
 
-export default function PdfViewer({ url, highlight, onReverse }: Props) {
+export default function PdfViewer({ url, highlight, onReverse, fileName }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [pages, setPages] = useState<PageDim[]>([]);
@@ -222,9 +224,16 @@ export default function PdfViewer({ url, highlight, onReverse }: Props) {
           ⤢ dbl-click to sync
         </span>
         {url && (
-          <a className="icon-btn" href={url} target="_blank" rel="noreferrer" title="Open PDF in new tab">
-            ↗
-          </a>
+          <>
+            {fileName && (
+              <a className="btn btn-sm pdf-download" href={url} download={fileName}>
+                ⬇ Download PDF
+              </a>
+            )}
+            <a className="icon-btn" href={url} target="_blank" rel="noreferrer" title="Open PDF in new tab">
+              ↗
+            </a>
+          </>
         )}
       </div>
       {error && <div className="banner banner-error">Could not render PDF: {error}</div>}
