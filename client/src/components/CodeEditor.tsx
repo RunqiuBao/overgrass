@@ -14,6 +14,15 @@ export interface EditorPos {
   head: number;
 }
 
+/** Live caret + scroll of the editor, reported as the user moves around. */
+export interface EditorNav {
+  /** Start of the selection — the one position the go-back history records
+   *  (selecting a sentence remembers where the sentence begins). */
+  pos: number;
+  /** Viewport offset; used only to detect jumps, never restored directly. */
+  scrollTop: number;
+}
+
 interface Props {
   /** Identity of the open document; changing it reloads editor content. */
   docKey: string;
@@ -41,6 +50,11 @@ interface Props {
   /** When this nonce changes, replace [from,to] with `text` (assistant substitute). */
   applyEdit?: { from: number; to: number; text: string } | null;
   applyEditNonce?: number;
+  /** Report the live caret + scroll as the user moves/scrolls (for the go-back history). */
+  onNavChange?: (nav: EditorNav) => void;
+  /** When this nonce changes, put the caret at `pos` and centre it vertically. */
+  navTarget?: { pos: number } | null;
+  navNonce?: number;
 }
 
 export default function CodeEditor({
@@ -57,6 +71,9 @@ export default function CodeEditor({
   applyEditNonce,
   getPosition,
   savePosition,
+  onNavChange,
+  navTarget,
+  navNonce,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -66,15 +83,26 @@ export default function CodeEditor({
   const onContextRef = useRef(onContextRequest);
   const getPositionRef = useRef(getPosition);
   const savePositionRef = useRef(savePosition);
+  const onNavChangeRef = useRef(onNavChange);
   onChangeRef.current = onChange;
   onDoubleClickRef.current = onDoubleClickLine;
   onContextRef.current = onContextRequest;
   getPositionRef.current = getPosition;
   savePositionRef.current = savePosition;
+  onNavChangeRef.current = onNavChange;
 
   // (Re)create the editor whenever the open document or language changes.
   useEffect(() => {
     if (!host.current) return;
+
+    // Report the live caret + scroll for the go-back history. Only the start of
+    // the selection matters — that is the spot "back" returns to.
+    const report = () => {
+      const cv = view.current;
+      if (!cv || !onNavChangeRef.current) return;
+      const sel = cv.state.selection.main;
+      onNavChangeRef.current({ pos: sel.from, scrollTop: cv.scrollDOM.scrollTop });
+    };
 
     const extensions = [
       lineNumbers(),
@@ -115,6 +143,9 @@ export default function CodeEditor({
       oneDark,
       EditorView.updateListener.of((u) => {
         if (u.docChanged) onChangeRef.current(u.state.doc.toString());
+        // Report the live caret whenever the selection moves, so the workspace
+        // can remember where we were for the go-back history.
+        if (u.selectionSet) report();
       }),
       EditorState.readOnly.of(!!readOnly),
     ];
@@ -134,6 +165,12 @@ export default function CodeEditor({
     const v = new EditorView({ state, parent: host.current });
     view.current = v;
 
+    // Scrolling doesn't fire the updateListener, so report scroll separately
+    // (the selection stays put but the viewport — what the user sees — moves).
+    // Scroll events arrive outside CodeMirror's update cycle, so reading the
+    // layout directly is fine here.
+    v.scrollDOM.addEventListener('scroll', report, { passive: true });
+
     if (restore) {
       // Selection-only: docChanged stays false, so the updateListener above
       // does not fire and this cannot mark the file dirty.
@@ -151,6 +188,7 @@ export default function CodeEditor({
       // and on unmount — opening an image or binary file drops this component.
       const sel = v.state.selection.main;
       savePositionRef.current?.(docKey, { anchor: sel.anchor, head: sel.head });
+      v.scrollDOM.removeEventListener('scroll', report);
       v.destroy();
       view.current = null;
     };
@@ -158,6 +196,23 @@ export default function CodeEditor({
     // they run after a (re)create and win over the restore above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey, language, readOnly]);
+
+  // Go-back history: put the caret back and centre it vertically. Goes through
+  // CodeMirror's own scrollIntoView pipeline because a raw scrollDOM.scrollTop
+  // write gets overridden by its measure cycle (scroll anchoring, or a pending
+  // centered scroll from the per-file caret restore).
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !navTarget) return;
+    const len = v.state.doc.length;
+    const pos = Number.isFinite(navTarget.pos) ? Math.min(Math.max(navTarget.pos, 0), len) : 0;
+    v.dispatch({
+      selection: { anchor: pos },
+      effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+    });
+    v.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navNonce]);
 
   // Inverse search: scroll to and briefly highlight a line.
   useEffect(() => {

@@ -34,6 +34,26 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ${TEX_PACKAGES} curl ca-certificates git \
  && rm -rf /var/lib/apt/lists/*
 
+# XeLaTeX/LuaLaTeX resolve fonts by *name* (\setmainfont{XITS}) through
+# fontconfig, but nothing here registers TeX Live's font tree with it — Debian
+# ships that snippet via a package we skip under --no-install-recommends. Without
+# this, fontspec fails with "The font cannot be found" even though the .otf files
+# are installed under texmf-dist. pdfLaTeX is unaffected (it uses TeX font names).
+# Kept as its own layer (and fontconfig installed here, not above) so this can
+# change without invalidating the multi-GB TeX Live layer.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fontconfig \
+ && rm -rf /var/lib/apt/lists/* \
+ && printf '%s\n' \
+      '<?xml version="1.0"?>' \
+      '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+      '<fontconfig>' \
+      '  <dir>/usr/share/texlive/texmf-dist/fonts/opentype</dir>' \
+      '  <dir>/usr/share/texlive/texmf-dist/fonts/truetype</dir>' \
+      '</fontconfig>' \
+      > /etc/fonts/conf.d/09-texlive-fonts.conf \
+ && fc-cache -fs
+
 # Claude Code CLI — enables the optional Claude Pro/Max subscription path for the
 # in-app assistant (set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`).
 # Best-effort: if the install fails, the API-key assistant path still works and

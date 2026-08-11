@@ -3,10 +3,20 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import type { CompileResult, FileNode, ProjectMeta } from '../types';
 import FileTree from '../components/FileTree';
-import CodeEditor, { type EditorPos } from '../components/CodeEditor';
+import CodeEditor, { type EditorPos, type EditorNav } from '../components/CodeEditor';
 import PdfViewer, { type PdfHighlight } from '../components/PdfViewer';
 import AssistantPopup from '../components/AssistantPopup';
 import HistoryPanel from '../components/HistoryPanel';
+import SettingsMenu from '../components/SettingsMenu';
+import type { LatexEngine } from '../types';
+
+/** Pane sizing floors (px). The editor is the only pane that flexes, so these
+ *  are what stop it being squeezed out of existence. GUTTERS_PX is the two
+ *  5px dividers, which sit outside the panes' own widths. */
+const MIN_EDITOR = 200;
+const MIN_FILES = 120;
+const MIN_PDF = 240;
+const GUTTERS_PX = 10;
 
 const TEXT_EXTS = ['.tex', '.txt', '.bib', '.cls', '.sty', '.md', '.markdown', '.json', '.yml', '.yaml', '.bst', '.csv', '.cfg', '.toml'];
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'];
@@ -21,6 +31,34 @@ function isText(path: string): boolean {
 }
 function isImage(path: string): boolean {
   return IMAGE_EXTS.includes(extOf(path));
+}
+
+/** A place to jump back to: the open file plus both panes' positions. */
+interface NavSnapshot {
+  path: string;
+  /** Caret (start of the selection) — what the editor restore centres on. */
+  pos: number;
+  /** Editor viewport offset; used only to detect jumps, never restored. */
+  editorScroll: number;
+  pdfScroll: number;
+}
+
+// A "jump" (worth remembering in the go-back history) is a settle far from the
+// previous one — a different file, a big scroll on either side, or a long caret
+// move. Thresholds are heuristics; tune freely.
+const JUMP_EDITOR_SCROLL = 120; // px
+const JUMP_PDF_SCROLL = 200; // px
+const JUMP_CARET = 400; // chars
+const MAX_NAV_HISTORY = 50; // oldest entries drop off first
+
+/** Whether two spots are far enough apart to count as a jump between them. */
+function isJump(a: NavSnapshot, b: NavSnapshot): boolean {
+  return (
+    a.path !== b.path ||
+    Math.abs(a.editorScroll - b.editorScroll) >= JUMP_EDITOR_SCROLL ||
+    Math.abs(a.pdfScroll - b.pdfScroll) >= JUMP_PDF_SCROLL ||
+    Math.abs(a.pos - b.pos) >= JUMP_CARET
+  );
 }
 
 /** Caret positions are remembered per project, keyed by file path. */
@@ -60,6 +98,7 @@ export default function Workspace() {
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [savingEngine, setSavingEngine] = useState(false);
   const [lastAutosave, setLastAutosave] = useState<number | null>(null);
   const [, setTick] = useState(0); // forces the "Xm ago" label to refresh
 
@@ -73,6 +112,12 @@ export default function Workspace() {
   const [assist, setAssist] = useState<{ x: number; y: number; text: string; from: number; to: number } | null>(null);
   const [applyEdit, setApplyEdit] = useState<{ from: number; to: number; text: string } | null>(null);
   const [applyEditNonce, setApplyEditNonce] = useState(0);
+
+  // Go-back history (Ctrl+Alt+−): restore targets, bumped by nonce.
+  const [editorNavTarget, setEditorNavTarget] = useState<{ pos: number } | null>(null);
+  const [editorNavNonce, setEditorNavNonce] = useState(0);
+  const [pdfScrollTarget, setPdfScrollTarget] = useState<number | null>(null);
+  const [pdfScrollNonce, setPdfScrollNonce] = useState(0);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
@@ -100,6 +145,82 @@ export default function Workspace() {
     }
   }, [posKey]);
 
+  // --- Go-back history (Ctrl+Alt+−) -----------------------------------------
+  // The live position of each pane, updated immediately as the user moves. A
+  // debounced settle decides when a move counts as a "jump" worth remembering.
+  // Each jump's origin is appended to an in-memory trail; Ctrl+Alt+− walks it
+  // backwards. The trail lives only while this page is mounted.
+  const liveEditorRef = useRef<EditorNav>({ pos: 0, scrollTop: 0 });
+  const livePdfScrollRef = useRef(0);
+  const lastSettledRef = useRef<NavSnapshot | null>(null);
+  const navRingRef = useRef<NavSnapshot[]>([]); // oldest first
+  const navCursorRef = useRef<number | null>(null); // index we're at, null = live (not browsing)
+  const suppressSettleRef = useRef(false); // true during a programmatic restore
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openPathRef = useRef<string | null>(openPath);
+  openPathRef.current = openPath;
+
+  // History is per-project; reset if the route ever swaps projects under us.
+  const navProjectRef = useRef(id);
+  if (navProjectRef.current !== id) {
+    navProjectRef.current = id;
+    navRingRef.current = [];
+    navCursorRef.current = null;
+    lastSettledRef.current = null;
+  }
+
+  const currentSnapshot = useCallback((): NavSnapshot | null => {
+    const path = openPathRef.current;
+    if (!path) return null;
+    const e = liveEditorRef.current;
+    return {
+      path,
+      pos: e.pos,
+      editorScroll: e.scrollTop,
+      pdfScroll: livePdfScrollRef.current,
+    };
+  }, []);
+
+  // Append a spot to the trail. The exact same caret (repeated clicks on one
+  // spot) or a nearby settle refreshes the top entry instead of stacking, so
+  // the trail holds distinct places, not duplicates or jitter.
+  const pushNav = useCallback((snap: NavSnapshot) => {
+    const ring = navRingRef.current;
+    const top = ring[ring.length - 1];
+    const sameCaret = top && top.path === snap.path && top.pos === snap.pos;
+    if (top && (sameCaret || !isJump(top, snap))) ring[ring.length - 1] = snap;
+    else ring.push(snap);
+    if (ring.length > MAX_NAV_HISTORY) ring.shift();
+  }, []);
+
+  const onSettle = useCallback(() => {
+    const cur = currentSnapshot();
+    if (!cur) return;
+    const prev = lastSettledRef.current;
+    // A restore lands us right where a trail entry was; don't re-record that.
+    if (!suppressSettleRef.current && prev && isJump(prev, cur)) {
+      pushNav(prev); // the origin of the jump is where "back" goes
+      navCursorRef.current = null; // any real jump puts us back at "live"
+    }
+    suppressSettleRef.current = false;
+    lastSettledRef.current = cur;
+  }, [currentSnapshot, pushNav]);
+
+  const scheduleSettle = useCallback(() => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(onSettle, 350);
+  }, [onSettle]);
+
+  const handleEditorNav = useCallback((nav: EditorNav) => {
+    liveEditorRef.current = nav;
+    scheduleSettle();
+  }, [scheduleSettle]);
+
+  const handlePdfScroll = useCallback((scrollTop: number) => {
+    livePdfScrollRef.current = scrollTop;
+    scheduleSettle();
+  }, [scheduleSettle]);
+
   const getPosition = useCallback((path: string) => positions.current!.get(path), []);
 
   const savePosition = useCallback(
@@ -121,6 +242,9 @@ export default function Workspace() {
 
   // Resizable panes. Widths (px) for the file-tree and PDF panes; the editor
   // pane flexes to fill whatever is left. Persisted across sessions.
+  //
+  // Only the editor pane can shrink, so the two fixed widths have to leave room
+  // for it — otherwise it is squeezed to nothing and the file looks unopenable.
   const bodyRef = useRef<HTMLDivElement>(null);
   const [filesWidth, setFilesWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem('ws.filesWidth'));
@@ -140,6 +264,31 @@ export default function Workspace() {
   filesWidthRef.current = filesWidth;
   pdfWidthRef.current = pdfWidth;
 
+  // Keep the editor usable when the layout no longer fits: on window resize, and
+  // on mount, since the widths are restored from a session whose window may have
+  // been wider. Space comes back from the PDF pane first, then the file tree.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const fit = () => {
+      const avail = body.clientWidth - GUTTERS_PX;
+      if (avail <= 0) return; // hidden/unmeasured — nothing to fit against
+      const files = filesWidthRef.current;
+      const pdf = pdfWidthRef.current;
+      let over = files + pdf + MIN_EDITOR - avail;
+      if (over <= 0) return;
+      const pdfCut = Math.min(over, Math.max(0, pdf - MIN_PDF));
+      over -= pdfCut;
+      const filesCut = Math.min(over, Math.max(0, files - MIN_FILES));
+      if (pdfCut) setPdfWidth(pdf - pdfCut);
+      if (filesCut) setFilesWidth(files - filesCut);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(body);
+    return () => ro.disconnect();
+  }, []);
+
   // Start dragging a gutter. `which` selects which pane the gutter resizes.
   const startResize = useCallback((which: 'files' | 'pdf') => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -147,14 +296,12 @@ export default function Workspace() {
       const body = bodyRef.current;
       if (!body) return;
       const rect = body.getBoundingClientRect();
-      // Keep at least 200px for the editor pane between the two gutters.
-      const minEditor = 200;
       if (which === 'files') {
-        const max = rect.width - pdfWidthRef.current - minEditor;
-        setFilesWidth(Math.max(120, Math.min(ev.clientX - rect.left, max)));
+        const max = rect.width - pdfWidthRef.current - MIN_EDITOR;
+        setFilesWidth(Math.max(MIN_FILES, Math.min(ev.clientX - rect.left, max)));
       } else {
-        const max = rect.width - filesWidthRef.current - minEditor;
-        setPdfWidth(Math.max(240, Math.min(rect.right - ev.clientX, max)));
+        const max = rect.width - filesWidthRef.current - MIN_EDITOR;
+        setPdfWidth(Math.max(MIN_PDF, Math.min(rect.right - ev.clientX, max)));
       }
     };
     const onUp = () => {
@@ -292,6 +439,76 @@ export default function Workspace() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [compiling]);
 
+  // Restore a trail entry — editor caret (centred) and PDF scroll together —
+  // and move the cursor there. Shared by the back and forward walkers.
+  async function restoreAt(idx: number) {
+    const target = navRingRef.current[idx];
+    if (!target) return;
+    suppressSettleRef.current = true;
+    if (target.path !== openPathRef.current) {
+      const ok = await openFile(target.path);
+      if (!ok) {
+        suppressSettleRef.current = false;
+        navCursorRef.current = idx; // file gone — skip it; the next press walks on
+        return;
+      }
+    }
+    setEditorNavTarget({ pos: target.pos });
+    setEditorNavNonce((n) => n + 1);
+    setPdfScrollTarget(target.pdfScroll);
+    setPdfScrollNonce((n) => n + 1);
+    navCursorRef.current = idx;
+    lastSettledRef.current = target; // we're now sitting at `target`
+  }
+
+  // Ctrl+Alt+− walks backwards through the trail of remembered positions, each
+  // press one step older.
+  async function goBack() {
+    const ring = navRingRef.current;
+    let idx: number;
+    if (navCursorRef.current === null) {
+      // Entering history from "live": record the current spot first, so a later
+      // jump away from wherever we land keeps the full trail intact.
+      const here = currentSnapshot();
+      if (here) pushNav(here);
+      // The newest entry is `here` (or a spot near it) — start one before it.
+      // With no open file there was nothing to push, so start at the newest.
+      idx = here ? ring.length - 2 : ring.length - 1;
+    } else {
+      idx = navCursorRef.current - 1;
+    }
+    if (idx >= 0) await restoreAt(idx);
+  }
+
+  // Ctrl+Alt++ walks forward again, back towards where history was entered.
+  async function goForward() {
+    if (navCursorRef.current === null) return; // already at the live end
+    const idx = navCursorRef.current + 1;
+    if (idx < navRingRef.current.length) await restoreAt(idx);
+  }
+
+  const goBackRef = useRef(goBack);
+  const goForwardRef = useRef(goForward);
+  goBackRef.current = goBack;
+  goForwardRef.current = goForward;
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!e.altKey || !(e.ctrlKey || e.metaKey)) return;
+      // `code` so the physical keys work regardless of keyboard layout. `Equal`
+      // is the +/= key — the unshifted "plus" (matching how browsers treat
+      // Ctrl+'+' zoom); the numpad variants are the explicit −/+ keys.
+      if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+        e.preventDefault();
+        goBackRef.current();
+      } else if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+        e.preventDefault();
+        goForwardRef.current();
+      }
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   // Auto-save to the safety-net branch every 2 minutes (commits only if changed).
   // A ref keeps the latest editor state without resetting the interval.
   const autosaveRef = useRef<() => void>(() => {});
@@ -387,6 +604,18 @@ export default function Workspace() {
       setProject(meta);
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  async function handleEngineChange(engine: LatexEngine) {
+    setSavingEngine(true);
+    try {
+      const meta = await api.updateProject(id, { engine });
+      setProject(meta);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingEngine(false);
     }
   }
 
@@ -535,6 +764,13 @@ export default function Workspace() {
           <button className="btn" onClick={() => setShowHistory(true)} title="Version history">
             🕘 History
           </button>
+          {project && (
+            <SettingsMenu
+              engine={project.engine}
+              onEngineChange={handleEngineChange}
+              busy={savingEngine}
+            />
+          )}
           <button className="btn" onClick={() => setShowLog((s) => !s)}>
             {result && (!result.success || result.errors.length > 0) ? '⚠ Logs' : 'Logs'}
           </button>
@@ -590,6 +826,9 @@ export default function Workspace() {
                 applyEditNonce={applyEditNonce}
                 getPosition={getPosition}
                 savePosition={savePosition}
+                onNavChange={handleEditorNav}
+                navTarget={editorNavTarget}
+                navNonce={editorNavNonce}
               />
             ) : isImage(openPath) ? (
               <div className="asset-preview">
@@ -619,6 +858,9 @@ export default function Workspace() {
             highlight={pdfHighlight}
             onReverse={handleInverseSync}
             fileName={pdfFileName}
+            onScrollChange={handlePdfScroll}
+            scrollTarget={pdfScrollTarget}
+            scrollNonce={pdfScrollNonce}
           />
         </section>
       </div>

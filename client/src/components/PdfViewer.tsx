@@ -21,6 +21,11 @@ interface Props {
   onReverse: (page: number, x: number, y: number) => void;
   /** Filename for the download button; omit to hide it. */
   fileName?: string;
+  /** Report the live scroll offset as the user scrolls (for the go-back history). */
+  onScrollChange?: (scrollTop: number) => void;
+  /** When this nonce changes, restore the scroll offset in `scrollTarget`. */
+  scrollTarget?: number | null;
+  scrollNonce?: number;
 }
 
 interface PageDim {
@@ -30,7 +35,7 @@ interface PageDim {
   h: number;
 }
 
-export default function PdfViewer({ url, highlight, onReverse, fileName }: Props) {
+export default function PdfViewer({ url, highlight, onReverse, fileName, onScrollChange, scrollTarget, scrollNonce }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [pages, setPages] = useState<PageDim[]>([]);
@@ -43,6 +48,8 @@ export default function PdfViewer({ url, highlight, onReverse, fileName }: Props
   const wrapRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const textRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const overlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onScrollChangeRef = useRef(onScrollChange);
+  onScrollChangeRef.current = onScrollChange;
 
   // Load the document whenever the URL changes.
   useEffect(() => {
@@ -180,6 +187,23 @@ export default function PdfViewer({ url, highlight, onReverse, fileName }: Props
     overlayTimer.current = setTimeout(() => setOverlay(null), 2500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlight?.nonce]);
+
+  // Report the live scroll offset so the workspace can remember it for go-back.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const onScroll = () => onScrollChangeRef.current?.(el.scrollTop);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Go-back history: restore the exact scroll offset.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || scrollTarget == null) return;
+    el.scrollTop = scrollTarget;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollNonce]);
 
   function handleDoubleClick(e: React.MouseEvent, num: number) {
     const wrap = wrapRefs.current[num];

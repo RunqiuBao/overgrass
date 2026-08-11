@@ -268,6 +268,55 @@ a { color: var(--green); }
 .autosave-status { color: var(--green); }
 .ws-actions { display: flex; gap: 8px; }
 
+/* ---- settings gear menu ---- */
+.settings-menu { position: relative; }
+.settings-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 10px 12px;
+  z-index: 70;
+}
+.settings-section { display: flex; flex-direction: column; gap: 6px; }
+.settings-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.settings-radio:hover { background: var(--panel-3); }
+.settings-radio input { accent-color: var(--green); cursor: pointer; }
+.settings-hint { font-size: 11px; margin-top: 4px; }
+.settings-section-divider { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.settings-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.settings-item:hover { background: var(--panel-3); }
+
 .ws-body { flex: 1; display: flex; min-height: 0; }
 .pane { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
 .pane-files {
@@ -523,6 +572,46 @@ body.resizing-col iframe { pointer-events: none; }
 .history-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .history-msg { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-current { color: var(--green); font-weight: 600; }
+
+/* ---- keyboard shortcuts modal ---- */
+.shortcuts-modal {
+  width: 460px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--green);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.shortcuts-list { list-style: none; margin: 0; padding: 6px 0; overflow: auto; }
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 16px;
+}
+.shortcut-row:hover { background: var(--panel-2); }
+.shortcut-label { font-size: 13px; }
+.shortcut-keys { display: flex; align-items: center; flex-shrink: 0; }
+.shortcut-plus { color: var(--muted); font-size: 12px; }
+.shortcut-phrase { font-size: 12px; color: var(--muted); }
+.shortcuts-modal kbd {
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  color: var(--text);
+  white-space: nowrap;
+}
 
 /* ---- Claude assistant popup ---- */
 .assistant-overlay {

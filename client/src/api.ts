@@ -39,7 +39,7 @@ export const api = {
   },
   async updateProject(
     id: string,
-    patch: Partial<Pick<ProjectMeta, 'name' | 'mainFile' | 'tags'>>,
+    patch: Partial<Pick<ProjectMeta, 'name' | 'mainFile' | 'tags' | 'engine'>>,
   ): Promise<ProjectMeta> {
     return json(
       await fetch(`${BASE}/projects/${id}`, {

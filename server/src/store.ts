@@ -24,11 +24,18 @@ const META_FILENAME = '.overgrass.json';
 /** Names that never show up in the file tree and can't be edited directly. */
 const HIDDEN = new Set([META_FILENAME, BUILD_DIRNAME, '.git', '.DS_Store']);
 
+/** LaTeX engines we can drive through latexmk (see compile.ts for the flags). */
+export const LATEX_ENGINES = ['pdflatex', 'xelatex', 'lualatex'] as const;
+export type LatexEngine = (typeof LATEX_ENGINES)[number];
+export const DEFAULT_ENGINE: LatexEngine = 'pdflatex';
+
 export interface ProjectMeta {
   id: string;
   name: string;
   mainFile: string | null;
   tags: string[];
+  /** Which LaTeX engine to compile with. Defaults to pdflatex. */
+  engine: LatexEngine;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,6 +94,7 @@ async function readMeta(id: string): Promise<ProjectMeta> {
   const meta = JSON.parse(raw) as ProjectMeta;
   // Backfill fields added after a project was created.
   if (!Array.isArray(meta.tags)) meta.tags = [];
+  if (!LATEX_ENGINES.includes(meta.engine)) meta.engine = DEFAULT_ENGINE;
   return meta;
 }
 
@@ -138,12 +146,13 @@ export async function createProject(name: string): Promise<ProjectMeta> {
     name: name.trim() || 'Untitled Project',
     mainFile: 'main.tex',
     tags: [],
+    engine: DEFAULT_ENGINE,
     createdAt: now,
     updatedAt: now,
   };
   await writeMeta(meta);
-  // Seed with a starter document so a fresh project compiles immediately.
-  await fsp.writeFile(resolveInProject(id, 'main.tex'), STARTER_TEX, 'utf8');
+  // Seed with a document so a fresh project compiles immediately.
+  await fsp.writeFile(resolveInProject(id, 'main.tex'), scratchTex(meta.name), 'utf8');
   return meta;
 }
 
@@ -158,6 +167,14 @@ export async function renameProject(id: string, name: string): Promise<ProjectMe
 export async function setMainFile(id: string, mainFile: string): Promise<ProjectMeta> {
   const meta = await readMeta(id);
   meta.mainFile = mainFile;
+  meta.updatedAt = new Date().toISOString();
+  await writeMeta(meta);
+  return meta;
+}
+
+export async function setEngine(id: string, engine: LatexEngine): Promise<ProjectMeta> {
+  const meta = await readMeta(id);
+  meta.engine = engine;
   meta.updatedAt = new Date().toISOString();
   await writeMeta(meta);
   return meta;
@@ -201,6 +218,7 @@ export async function copyProject(id: string): Promise<ProjectMeta> {
     name: `${meta.name} (copy)`,
     mainFile: meta.mainFile,
     tags: [...meta.tags],
+    engine: meta.engine,
     createdAt: now,
     updatedAt: now,
   };
@@ -372,6 +390,7 @@ export async function importZip(zipBuffer: Buffer, name: string): Promise<Projec
     name: name.trim() || 'Imported Project',
     mainFile: null,
     tags: [],
+    engine: DEFAULT_ENGINE,
     createdAt: now,
     updatedAt: now,
   };
@@ -398,26 +417,38 @@ export async function exportZip(id: string): Promise<Buffer> {
   return zip.toBuffer();
 }
 
-const STARTER_TEX = `\\documentclass{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsmath}
+/** Escape the characters LaTeX treats specially, so a project name can be
+ *  dropped into the seed document verbatim. */
+function texEscape(s: string): string {
+  const map: Record<string, string> = {
+    '\\': '\\textbackslash{}',
+    '~': '\\textasciitilde{}',
+    '^': '\\textasciicircum{}',
+  };
+  // One pass, so replacements can't be re-escaped by a later rule.
+  return s.replace(/[\\~^&%$#_{}]/g, (c) => map[c] ?? `\\${c}`);
+}
 
-\\title{Untitled Project}
+// A bare document — no sample prose — with the packages needed to typeset math,
+// insert images and use Greek letters in text right away. The title block keeps
+// the body non-empty, so the very first compile produces a PDF rather than
+// pdfTeX's "No pages of output".
+const scratchTex = (name: string) => `\\documentclass{article}
+
+\\usepackage{graphicx} % Required for inserting images
+\\usepackage{amsmath}
+\\usepackage{bm}
+\\usepackage[margin=1.5in]{geometry}
+\\usepackage[utf8]{inputenc}
+\\usepackage{textgreek}
+
+\\title{${texEscape(name)}}
 \\author{}
 \\date{\\today}
 
 \\begin{document}
 
 \\maketitle
-
-\\section{Introduction}
-Welcome to your local Overleaf! Edit this file and click
-\\textbf{Recompile} to render the PDF.
-
-The mass--energy equivalence is
-\\begin{equation}
-  E = mc^2.
-\\end{equation}
 
 \\end{document}
 `;

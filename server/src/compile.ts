@@ -2,7 +2,15 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
-import { BUILD_DIRNAME, resolveInProject, resolveMainFile } from './store.js';
+import { BUILD_DIRNAME, DEFAULT_ENGINE, getProject, resolveInProject, resolveMainFile } from './store.js';
+import type { LatexEngine } from './store.js';
+
+/** latexmk output-mode flag that selects each engine. */
+const ENGINE_FLAG: Record<LatexEngine, string> = {
+  pdflatex: '-pdf',
+  xelatex: '-pdfxe',
+  lualatex: '-pdflua',
+};
 
 const execFileAsync = promisify(execFile);
 
@@ -112,8 +120,17 @@ export async function compileProject(id: string): Promise<CompileResult> {
   const buildDir = resolveInProject(id, BUILD_DIRNAME);
   fs.mkdirSync(buildDir, { recursive: true });
 
+  // The engine is a per-project setting; fall back to pdflatex if the meta is
+  // somehow missing or unreadable.
+  let engine: LatexEngine = DEFAULT_ENGINE;
+  try {
+    engine = (await getProject(id)).engine;
+  } catch {
+    /* no/broken meta — pdflatex is the safe default */
+  }
+
   const args = [
-    '-pdf',
+    ENGINE_FLAG[engine] ?? ENGINE_FLAG[DEFAULT_ENGINE],
     '-synctex=1', // emit <base>.synctex.gz so we can map source <-> PDF
     '-interaction=nonstopmode',
     // No -halt-on-error: like Overleaf, push through recoverable errors and

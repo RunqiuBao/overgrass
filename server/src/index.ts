@@ -12,6 +12,8 @@ import {
   renameProject,
   setMainFile,
   setTags,
+  setEngine,
+  LATEX_ENGINES,
   deleteProject,
   getFileTree,
   readFile,
@@ -145,11 +147,16 @@ app.get('/api/projects/:id', wrap(async (req, res) => {
 }));
 
 app.patch('/api/projects/:id', wrap(async (req, res) => {
-  const { name, mainFile, tags } = req.body ?? {};
+  const { name, mainFile, tags, engine } = req.body ?? {};
+  if (engine !== undefined && !LATEX_ENGINES.includes(engine)) {
+    res.status(400).json({ error: `engine must be one of: ${LATEX_ENGINES.join(', ')}.` });
+    return;
+  }
   let meta = await getProject(req.params.id);
   if (typeof name === 'string') meta = await renameProject(req.params.id, name);
   if (typeof mainFile === 'string') meta = await setMainFile(req.params.id, mainFile);
   if (Array.isArray(tags)) meta = await setTags(req.params.id, tags.map(String));
+  if (engine !== undefined) meta = await setEngine(req.params.id, engine);
   res.json(meta);
 }));
 

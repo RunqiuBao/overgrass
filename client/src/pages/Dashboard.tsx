@@ -152,8 +152,13 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="dash-actions">
-          <button className="btn" onClick={handleCreate} disabled={busy}>
-            + New project
+          <button
+            className="btn"
+            title="Bare main.tex with graphicx, amsmath, bm, geometry, inputenc and textgreek preloaded"
+            onClick={handleCreate}
+            disabled={busy}
+          >
+            ✎ New project from scratch
           </button>
           <button className="btn btn-primary" onClick={() => fileInput.current?.click()} disabled={busy}>
             ⬆ Import Overleaf .zip
