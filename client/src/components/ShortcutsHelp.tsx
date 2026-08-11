@@ -12,7 +12,7 @@ const SHORTCUTS: { label: string; keys: string[] }[] = [
   { label: 'Jump forward again', keys: ['Ctrl', 'Alt', '+'] },
   { label: 'Jump source → PDF (SyncTeX)', keys: ['Double-click in the editor'] },
   { label: 'Jump PDF → source (SyncTeX)', keys: ['Double-click in the PDF'] },
-  { label: 'Ask Claude about a selection', keys: ['Ctrl/Cmd', 'Right-click'] },
+  { label: 'Ask Claude (a selection seeds the prompt)', keys: ['Ctrl/Cmd', 'Right-click'] },
 ];
 
 /** Whether a key token is a real key cap (short) vs. a descriptive phrase. */

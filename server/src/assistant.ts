@@ -89,31 +89,32 @@ export async function saveCredential(value: string): Promise<Mode> {
 }
 
 export interface AskParams {
-  selection: string;
   prompt: string;
   fileName?: string;
   language?: string;
 }
 
+// Free-form on purpose. The user's message is whatever they typed in the popup
+// (seeded with their selection), so this may be a rewrite request, a question
+// about the document, or something unrelated to the selection entirely — the
+// reply is shown in full rather than force-fitted into a replacement.
 const SYSTEM_PROMPT = [
-  'You are an AI writing assistant embedded in a LaTeX editor (an Overleaf-like app).',
-  'The user has selected a snippet of their document and given an instruction.',
-  'Respond with ONLY a JSON object of the form {"options": ["<replacement>", ...]}.',
-  'Each array element is a COMPLETE replacement for the selected snippet —',
-  'preserve LaTeX syntax and surrounding style, no Markdown code fences, no commentary.',
-  'Provide exactly ONE option, UNLESS the user explicitly asks for multiple / alternatives /',
-  'variations / choices — in that case provide 2 to 4 genuinely distinct options.',
-  'If the instruction is a question rather than an edit, answer it as a single option.',
-  'Output the raw JSON object only — no preamble, no code fences.',
+  'You are an AI assistant embedded in a LaTeX editor (an Overleaf-like app).',
+  'The user is writing a document and may paste part of it into their message.',
+  'Answer whatever they actually ask: rewrite or translate a passage, explain a',
+  'concept, produce new LaTeX, debug a macro, or answer a plain question.',
+  'When you produce text meant to go into the document, write valid LaTeX that fits',
+  'the surrounding style, and keep any commentary clearly separate from it.',
+  'When the request is purely "rewrite this", reply with just the rewritten text so',
+  'it can be pasted straight back in. Otherwise be concise and well organised.',
 ].join(' ');
 
-function buildUserText({ selection, prompt, fileName, language }: AskParams): string {
-  return (
-    (fileName ? `File: ${fileName}\n` : '') +
-    `Selected ${language ?? 'text'}:\n<<<SELECTION\n${selection}\nSELECTION>>>\n\n` +
-    `Instruction: ${prompt}\n\n` +
-    'Reply with only the replacement text.'
-  );
+function buildUserText({ prompt, fileName, language }: AskParams): string {
+  const context = [
+    fileName ? `File: ${fileName}` : '',
+    language ? `Language: ${language}` : '',
+  ].filter(Boolean);
+  return (context.length ? `(${context.join(', ')})\n\n` : '') + prompt;
 }
 
 const DIAGNOSE_SYSTEM = [
@@ -149,40 +150,10 @@ function stripFences(s: string): string {
   return (m ? m[1] : t).trim();
 }
 
-/** Narrow a string to the outermost JSON object/array it contains. */
-function sliceJson(s: string): string | null {
-  const start = s.search(/[{[]/);
-  const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
-  return start >= 0 && end > start ? s.slice(start, end + 1) : null;
-}
-
-/** Parse the model's reply into one or more replacement options. */
-function extractOptions(raw: string): string[] {
-  const trimmed = raw.trim();
-  for (const candidate of [trimmed, sliceJson(trimmed)]) {
-    if (!candidate) continue;
-    try {
-      const parsed = JSON.parse(candidate) as unknown;
-      const arr = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray((parsed as { options?: unknown }).options)
-          ? (parsed as { options: unknown[] }).options
-          : null;
-      if (arr) {
-        const opts = arr.filter((o): o is string => typeof o === 'string' && o.trim() !== '');
-        if (opts.length) return opts.map((o) => o.trim());
-      }
-    } catch {
-      /* not JSON — try the next candidate */
-    }
-  }
-  // Reply wasn't JSON (or had no options): treat the whole thing as one option.
-  return [stripFences(trimmed)];
-}
-
-/** Transform a selection — returns one or more replacement options. */
-export async function ask(params: AskParams): Promise<string[]> {
-  return extractOptions(await run(SYSTEM_PROMPT, buildUserText(params)));
+/** Answer the user's message — free-form text, returned verbatim. A reply that
+ *  is nothing but one fenced block is unwrapped so it can be pasted directly. */
+export async function ask(params: AskParams): Promise<string> {
+  return stripFences(await run(SYSTEM_PROMPT, buildUserText(params)));
 }
 
 /** Diagnose a compile failure — returns a free-form explanation + fixes. */

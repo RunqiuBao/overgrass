@@ -123,11 +123,12 @@ export default function CodeEditor({
           return false; // let CodeMirror keep its default word-selection
         },
         contextmenu(event, v) {
-          // Ctrl/Cmd + right-click on a selection opens the Claude assistant.
+          // Ctrl/Cmd + right-click opens the Claude assistant. A selection seeds
+          // the prompt, but isn't required — the assistant answers anything, and
+          // with no selection its answer is inserted at the caret.
           if (!event.ctrlKey && !event.metaKey) return false; // normal right-click menu
           const sel = v.state.selection.main;
           const text = v.state.sliceDoc(sel.from, sel.to);
-          if (!text.trim()) return false; // need a selection
           event.preventDefault();
           onContextRef.current?.({
             text,

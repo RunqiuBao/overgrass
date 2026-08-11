@@ -95,12 +95,12 @@ app.post('/api/assistant/key', wrap(async (req, res) => {
 }));
 
 app.post('/api/assistant/ask', wrap(async (req, res) => {
-  const { selection, prompt, fileName, language } = req.body ?? {};
-  if (typeof selection !== 'string' || typeof prompt !== 'string') {
-    res.status(400).json({ error: 'Expected { selection, prompt }.' });
+  const { prompt, fileName, language } = req.body ?? {};
+  if (typeof prompt !== 'string' || !prompt.trim()) {
+    res.status(400).json({ error: 'Expected { prompt }.' });
     return;
   }
-  res.json({ options: await assistantAsk({ selection, prompt, fileName, language }) });
+  res.json({ answer: await assistantAsk({ prompt, fileName, language }) });
 }));
 
 app.post('/api/assistant/diagnose', wrap(async (req, res) => {

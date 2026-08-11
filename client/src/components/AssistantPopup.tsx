@@ -5,22 +5,39 @@ interface Props {
   /** Viewport coordinates of the click that opened the popup. */
   x: number;
   y: number;
+  /** Text under the cursor when the popup opened — seeds the prompt. */
   selection: string;
   fileName?: string;
   language?: string;
+  /** Put `text` in place of the original selection. */
   onReplace: (text: string) => void;
+  /** Drop `text` in just after the original selection, leaving it intact. */
+  onInsert: (text: string) => void;
   onClose: () => void;
 }
 
-const WIDTH = 380;
+const WIDTH = 560;
+const HEIGHT = 520;
 
-export default function AssistantPopup({ x, y, selection, fileName, language, onReplace, onClose }: Props) {
+export default function AssistantPopup({
+  x,
+  y,
+  selection,
+  fileName,
+  language,
+  onReplace,
+  onInsert,
+  onClose,
+}: Props) {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [mode, setMode] = useState<'subscription' | 'api' | null>(null);
   const [keyInput, setKeyInput] = useState('');
-  const [prompt, setPrompt] = useState('');
+  // Seeded with the selection so the user can edit it, add an instruction
+  // around it, or delete it and ask something else entirely.
+  const [prompt, setPrompt] = useState(selection);
   const [loading, setLoading] = useState(false);
-  const [options, setOptions] = useState<string[] | null>(null);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const keyRef = useRef<HTMLInputElement>(null);
@@ -35,16 +52,20 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
       .catch(() => setConfigured(false));
   }, []);
 
-  // Focus the relevant input once we know whether a key is configured.
+  // Focus the relevant input once we know whether a key is configured. The
+  // caret goes after the seeded selection, ready for the instruction.
   useEffect(() => {
-    if (configured === true) promptRef.current?.focus();
-    else if (configured === false) keyRef.current?.focus();
+    if (configured === true) {
+      const el = promptRef.current;
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    } else if (configured === false) keyRef.current?.focus();
   }, [configured]);
 
   // Position is stateful so the window can be dragged. Start on-screen.
   const [pos, setPos] = useState(() => ({
     left: Math.max(8, Math.min(x, window.innerWidth - WIDTH - 16)),
-    top: Math.max(8, Math.min(y, window.innerHeight - 320)),
+    top: Math.max(8, Math.min(y, window.innerHeight - HEIGHT - 16)),
   }));
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
 
@@ -87,14 +108,24 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
     if (!prompt.trim() || loading) return;
     setLoading(true);
     setError(null);
-    setOptions(null);
+    setAnswer(null);
     try {
-      const result = await api.assistantAsk({ selection, prompt, fileName, language });
-      setOptions(result);
+      setAnswer(await api.assistantAsk({ prompt, fileName, language }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function copyAnswer() {
+    if (!answer) return;
+    try {
+      await navigator.clipboard.writeText(answer);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError('Could not copy — your browser blocked clipboard access.');
     }
   }
 
@@ -107,7 +138,6 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="assistant-header assistant-drag" onMouseDown={startDrag} title="Drag to move">
-
           <span>
             ✦ Claude assistant
             {mode && (
@@ -155,70 +185,66 @@ export default function AssistantPopup({ x, y, selection, fileName, language, on
             </div>
           </div>
         ) : (
-          <div className="assistant-body">
-            <div className="assistant-selection" title="Selected text">
-              {selection.length > 240 ? selection.slice(0, 240) + '…' : selection}
-            </div>
+          <div className="assistant-body assistant-body-chat">
+            <label className="assistant-label small muted" htmlFor="assistant-prompt">
+              Your message — edit freely · Ctrl/Cmd+Enter to send
+            </label>
             <textarea
+              id="assistant-prompt"
               ref={promptRef}
               className="assistant-prompt"
-              placeholder="Ask Claude to rewrite, fix, translate… or 'give me 3 options'. (Enter to send, Shift+Enter for newline)"
+              placeholder="Ask Claude anything — rewrite this, explain it, write a new section…"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                // Ctrl/Cmd+Enter sends; plain Enter is a newline, since the box
+                // holds real document text the user is editing.
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
                   ask();
                 }
               }}
             />
+
             {error && <div className="assistant-error">{error}</div>}
 
-            {/* Single answer → one suggestion box. Multiple → pick-one cards. */}
-            {options && options.length === 1 && (
+            {(answer !== null || loading) && (
               <>
-                <div className="assistant-suggestion-label small muted">Suggestion</div>
-                <div className="assistant-suggestion">{options[0]}</div>
-              </>
-            )}
-            {options && options.length > 1 && (
-              <>
-                <div className="assistant-suggestion-label small muted">
-                  {options.length} options — pick your favorite
+                <div className="assistant-label small muted">
+                  {loading ? 'Claude is thinking…' : 'Response'}
                 </div>
-                <div className="assistant-options">
-                  {options.map((opt, i) => (
-                    <div key={i} className="assistant-option">
-                      <div className="assistant-option-text">{opt}</div>
-                      <button className="btn btn-primary assistant-option-use" onClick={() => onReplace(opt)}>
-                        ✓ Use this
-                      </button>
-                    </div>
-                  ))}
+                <div className="assistant-answer">
+                  {loading ? <span className="muted">⏳</span> : answer}
                 </div>
               </>
             )}
 
             <div className="assistant-actions">
-              {options === null ? (
-                <button className="btn btn-primary" onClick={ask} disabled={loading || !prompt.trim()}>
-                  {loading ? '⏳ Asking…' : '✦ Ask Claude'}
-                </button>
-              ) : (
+              {answer !== null && !loading && (
                 <>
-                  <button className="btn" onClick={() => ask()} disabled={loading}>
-                    ↻ Retry
+                  <button className="btn" title="Copy the response to the clipboard" onClick={copyAnswer}>
+                    {copied ? '✓ Copied' : '⧉ Copy'}
                   </button>
-                  <button className="btn" onClick={onClose}>
-                    Keep original
+                  <button
+                    className="btn"
+                    title="Insert the response after the text you selected"
+                    onClick={() => onInsert(answer)}
+                  >
+                    ↳ Insert below
                   </button>
-                  {options.length === 1 && (
-                    <button className="btn btn-primary" onClick={() => onReplace(options[0])}>
-                      ✓ Replace selection
-                    </button>
-                  )}
+                  <button
+                    className="btn"
+                    title="Replace the text you selected with the response"
+                    onClick={() => onReplace(answer)}
+                    disabled={!selection}
+                  >
+                    ⇄ Replace selection
+                  </button>
                 </>
               )}
+              <button className="btn btn-primary" onClick={ask} disabled={loading || !prompt.trim()}>
+                {loading ? '⏳ Asking…' : answer === null ? '✦ Ask Claude' : '↻ Ask again'}
+              </button>
             </div>
           </div>
         )}

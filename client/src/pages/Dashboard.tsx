@@ -145,7 +145,9 @@ export default function Dashboard() {
     <div className="dashboard">
       <header className="dash-header">
         <div className="brand">
-          <img className="logo-img" src={logoUrl} alt="Overgrass" />
+          <span className="logo-ring">
+            <img className="logo-img" src={logoUrl} alt="Overgrass" />
+          </span>
           <div className="brand-text">
             <h1>Overgrass</h1>
             <span className="tagline">your local Overleaf</span>

@@ -151,19 +151,18 @@ export const api = {
     );
   },
   async assistantAsk(params: {
-    selection: string;
     prompt: string;
     fileName?: string;
     language?: string;
-  }): Promise<string[]> {
-    const data = await json<{ options: string[] }>(
+  }): Promise<string> {
+    const data = await json<{ answer: string }>(
       await fetch(`${BASE}/assistant/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
       }),
     );
-    return data.options;
+    return data.answer;
   },
   async assistantDiagnose(params: {
     log: string;

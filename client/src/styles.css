@@ -5,6 +5,7 @@
   --green-tint: rgba(46, 125, 50, 0.20);
   --yellow: #b8860b;       /* dark yellow (dark goldenrod) — secondary accent */
   --yellow-dark: #8f680a;
+  --red: #d65448;          /* the red already used for destructive actions */
   --yellow-tint: rgba(184, 134, 11, 0.18);
 
   /* Grays (darker theme) */
@@ -136,6 +137,25 @@ a { color: var(--green); }
   object-fit: cover;
   display: block;
   border-radius: 50%; /* logo art is circular — clip away the transparent corners */
+}
+/* Red ring centred on the logo's edge — 3px over the art, 3px beyond it. Drawn
+   as an overlay rather than a border on the image itself: a border would shrink
+   the art inside the same 128px box (box-sizing: border-box) instead of sitting
+   on top of it. The ::after box is inset -3px, so its 6px border spans -3..+3
+   around the image boundary. */
+.brand .logo-ring {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  line-height: 0;
+}
+.brand .logo-ring::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 6px solid var(--red);
+  border-radius: 50%;
+  pointer-events: none;
 }
 .brand .tagline { color: var(--muted); font-size: 13px; }
 .dash-actions { display: flex; gap: 8px; }
@@ -631,10 +651,10 @@ body.resizing-col iframe { pointer-events: none; }
   flex-direction: column;
   overflow: hidden;
   /* Draggable (header) + resizable (corner grip). */
-  width: 380px;
-  height: auto;
-  min-width: 300px;
-  min-height: 200px;
+  width: 560px;
+  height: 520px;
+  min-width: 320px;
+  min-height: 240px;
   max-width: 92vw;
   max-height: 88vh;
   resize: both;
@@ -660,23 +680,33 @@ body.resizing-col iframe { pointer-events: none; }
   border-radius: 3px;
   font-size: 11px;
 }
-.assistant-selection {
-  max-height: 84px;
+/* Chat layout: the response area takes the slack and scrolls on its own, so the
+   popup itself never grows a second scrollbar. */
+.assistant-body-chat { overflow: hidden; }
+.assistant-label { text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+.assistant-answer {
+  flex: 1;
+  min-height: 90px;
   overflow: auto;
-  padding: 6px 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  padding: 8px 9px;
+  background: var(--green-tint);
+  border: 1px solid var(--green);
   border-radius: 4px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--muted);
+  color: var(--text);
+  user-select: text;
 }
 .assistant-prompt {
   width: 100%;
-  min-height: 56px;
+  min-height: 84px;
+  max-height: 45%;
+  flex-shrink: 0;
   resize: vertical;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   padding: 7px 9px;
   font-size: 13px;
   color: var(--text);
@@ -684,7 +714,6 @@ body.resizing-col iframe { pointer-events: none; }
   border: 1px solid var(--border);
   border-radius: 4px;
   outline: none;
-  font-family: inherit;
 }
 .assistant-prompt:focus { border-color: var(--green); }
 .assistant-key {
@@ -698,21 +727,6 @@ body.resizing-col iframe { pointer-events: none; }
   outline: none;
 }
 .assistant-key:focus { border-color: var(--green); }
-.assistant-suggestion-label { text-transform: uppercase; letter-spacing: 0.04em; }
-.assistant-suggestion {
-  max-height: 200px;
-  overflow: auto;
-  padding: 8px 9px;
-  background: var(--green-tint);
-  border: 1px solid var(--green);
-  border-radius: 4px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text);
-}
 .assistant-error {
   padding: 6px 8px;
   background: rgba(214, 84, 72, 0.18);
@@ -720,28 +734,14 @@ body.resizing-col iframe { pointer-events: none; }
   border-radius: 4px;
   font-size: 12px;
 }
-.assistant-options { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow: auto; }
-.assistant-option {
+.assistant-actions {
   display: flex;
-  flex-direction: column;
   gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg);
-  transition: border-color 0.12s;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  flex-shrink: 0;
 }
-.assistant-option:hover { border-color: var(--green); }
-.assistant-option-text {
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text);
-}
-.assistant-option-use { align-self: flex-end; }
-.assistant-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* ---- log panel ---- */
 .log-panel {

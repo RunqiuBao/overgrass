@@ -727,6 +727,15 @@ export default function Workspace() {
     setAssist(null);
   }
 
+  /** Drop the answer in after the selection (empty range = pure insert), on its
+   *  own line so it doesn't run into the text it follows. */
+  function handleAssistInsert(text: string) {
+    if (!assist) return;
+    setApplyEdit({ from: assist.to, to: assist.to, text: `\n\n${text}` });
+    setApplyEditNonce((n) => n + 1);
+    setAssist(null);
+  }
+
   // Name the downloaded PDF after the project, sanitised the same way the .zip
   // export does server-side, so the two downloads agree.
   const pdfFileName = `${(project?.name ?? '').replace(/[^a-z0-9-_]+/gi, '_') || 'project'}.pdf`;
@@ -929,6 +938,7 @@ export default function Workspace() {
           fileName={openPath ?? undefined}
           language={openPath && extOf(openPath) === '.tex' ? 'LaTeX' : 'text'}
           onReplace={handleAssistReplace}
+          onInsert={handleAssistInsert}
           onClose={() => setAssist(null)}
         />
       )}
