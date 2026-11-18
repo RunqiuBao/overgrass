@@ -54,6 +54,15 @@ RUN apt-get update \
       > /etc/fonts/conf.d/09-texlive-fonts.conf \
  && fc-cache -fs
 
+# pLaTeX (jsbook etc.) goes through dvipdfmx, whose Japanese font map defaults
+# to "noEmbed": the PDF names Ryumin/GothicBBB without embedding them, and
+# PDF.js (or any viewer lacking those fonts) renders the kanji wrongly. Embed the
+# bundled Harano Aji fonts instead. Skipped if a slim TEX_PACKAGES omits
+# Japanese support.
+RUN if command -v kanji-config-updmap-sys >/dev/null 2>&1; then \
+      kanji-config-updmap-sys haranoaji; \
+    fi
+
 # Claude Code CLI — enables the optional Claude Pro/Max subscription path for the
 # in-app assistant (set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`).
 # Best-effort: if the install fails, the API-key assistant path still works and

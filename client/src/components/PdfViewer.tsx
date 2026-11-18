@@ -62,7 +62,14 @@ export default function PdfViewer({ url, highlight, onReverse, fileName, onScrol
     setError(null);
     (async () => {
       try {
-        const d = await pdfjsLib.getDocument({ url }).promise;
+        const d = await pdfjsLib.getDocument({
+          url,
+          // Served from pdfjs-dist by vite.config.ts — required for CJK text
+          // (predefined CMaps) and non-embedded standard fonts.
+          cMapUrl: `${import.meta.env.BASE_URL}pdfjs/cmaps/`,
+          cMapPacked: true,
+          standardFontDataUrl: `${import.meta.env.BASE_URL}pdfjs/standard_fonts/`,
+        }).promise;
         if (cancelled) return;
         setDoc(d);
       } catch (e) {
