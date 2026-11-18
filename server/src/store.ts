@@ -25,7 +25,7 @@ const META_FILENAME = '.overgrass.json';
 const HIDDEN = new Set([META_FILENAME, BUILD_DIRNAME, '.git', '.DS_Store']);
 
 /** LaTeX engines we can drive through latexmk (see compile.ts for the flags). */
-export const LATEX_ENGINES = ['pdflatex', 'xelatex', 'lualatex'] as const;
+export const LATEX_ENGINES = ['pdflatex', 'xelatex', 'lualatex', 'platex'] as const;
 export type LatexEngine = (typeof LATEX_ENGINES)[number];
 export const DEFAULT_ENGINE: LatexEngine = 'pdflatex';
 

@@ -5,11 +5,19 @@ import path from 'node:path';
 import { BUILD_DIRNAME, DEFAULT_ENGINE, getProject, resolveInProject, resolveMainFile } from './store.js';
 import type { LatexEngine } from './store.js';
 
-/** latexmk output-mode flag that selects each engine. */
-const ENGINE_FLAG: Record<LatexEngine, string> = {
-  pdflatex: '-pdf',
-  xelatex: '-pdfxe',
-  lualatex: '-pdflua',
+/** latexmk arguments that select each engine. */
+const ENGINE_ARGS: Record<LatexEngine, string[]> = {
+  pdflatex: ['-pdf'],
+  xelatex: ['-pdfxe'],
+  lualatex: ['-pdflua'],
+  // Japanese pLaTeX (jsbook/jsarticle…): platex -> DVI -> dvipdfmx, with the
+  // Japanese-aware pbibtex/mendex for bibliography and index.
+  platex: [
+    '-pdfdvi',
+    '-latex=platex %O %S',
+    '-e',
+    '$dvipdf = q/dvipdfmx %O -o %D %S/; $bibtex = q/pbibtex %O %B/; $makeindex = q/mendex %O -o %D %S/;',
+  ],
 };
 
 const execFileAsync = promisify(execFile);
@@ -130,7 +138,7 @@ export async function compileProject(id: string): Promise<CompileResult> {
   }
 
   const args = [
-    ENGINE_FLAG[engine] ?? ENGINE_FLAG[DEFAULT_ENGINE],
+    ...(ENGINE_ARGS[engine] ?? ENGINE_ARGS[DEFAULT_ENGINE]),
     '-synctex=1', // emit <base>.synctex.gz so we can map source <-> PDF
     '-interaction=nonstopmode',
     // No -halt-on-error: like Overleaf, push through recoverable errors and
